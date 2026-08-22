@@ -1,0 +1,39 @@
+# This file exists BEFORE any code so that no credential, dump, or keystore can ever become
+# commitable in this public repo (D-24). Secrets live in GitHub Secrets or a gitignored .env only.
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.jks
+*.keystore
+*.p12
+*.pem
+
+# Dependencies & build output
+node_modules/
+dist/
+build/
+.vite/
+coverage/
+
+# Nx
+.nx/cache
+.nx/workspace-data
+
+# Backups, dumps & diagnostics (never committed — see D-12, N-15)
+backups/
+diagnostics/
+*.dump
+*.sql.gz
+*.log
+
+# Test & tooling output
+playwright-report/
+test-results/
+.playwright/
+*.tsbuildinfo
+
+# OS / editor noise
+.DS_Store
+Thumbs.db
