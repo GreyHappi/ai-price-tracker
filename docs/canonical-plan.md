@@ -282,7 +282,8 @@ Coverage gates **only** on parser/domain packages — no repo-wide % gate.
 - **Scrumban:** 1-week cycles, **WIP = 1**, sprint goal + demo/review + short retro; no daily
   standup. Story points kept lightweight **+ actual cycle time recorded**; calibration after ~3
   cycles. **No-Fiction rule:** every artifact is generated from real data. One process policy
-  records intentionally omitted ceremonies; do not create one document per non-event.
+  ([records/process-policy.md](records/process-policy.md)) records intentionally omitted
+  ceremonies; do not create one document per non-event.
 - **Specs (D-21):** Kiro IDE generates `requirements.md` (EARS) / `design.md` / `tasks.md` —
   **only for work above a few hours or spanning layers**; small work = board entry + commit
   trail. Season outputs: `handoff.md` + `review.md` alongside the spec. Prompt kit:

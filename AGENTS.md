@@ -66,5 +66,6 @@ Phase 0 will fill this section (pnpm/nx/docker/test commands). Until then there 
 (React SPA/PWA); `native` appears at the Tauri phase.
 `packages/` — contracts, domain, db, scraping, ai, i18n, notifications, testing.
 `docs/` — canonical plan, ledger, ADRs (`decisions/`), prompts, roadmap, runbooks, work/board,
-and `records/` (append-only history: `records/seasons/` season logs + appendices, spike results).
+and `records/` (append-only history: `records/seasons/` season logs + appendices, spike results,
+process policy).
 `.kiro/` — steering + specs (generated via Kiro IDE).

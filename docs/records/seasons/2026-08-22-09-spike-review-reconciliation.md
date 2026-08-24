@@ -158,6 +158,12 @@ completion. All three runbook sections now record `/XML` plus verbose task state
 exits, with a zero last-run result required. PT-001 moves to **Done**; O-20 remains a Phase-1 entry
 condition rather than an applied D-02/D-12 amendment.
 
+**Loop close (2026-08-24):** the owner accepted the reconciliation and committed it as `e2e2eac`,
+then merged the Phase −1 gate to `main`. Final verdict **GATE: pass** for PT-001. Two items are
+carried forward rather than closed: O-20 (PT-005) remains an open Phase-1 backup-lane entry
+condition, and the gate's fresh-session informed review is deliberately omitted for lack of real
+inputs — recorded, with its rationale, in [process-policy.md](../process-policy.md).
+
 ## Next step
 
 Give PT-002 Phase 0 its Kiro planner prompt. Settle **O-20** through PT-005 before the Phase-1
