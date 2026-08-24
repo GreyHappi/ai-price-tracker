@@ -59,10 +59,27 @@ results do not depend on ambient package-manager or generator defaults.
   `notifications`, and `testing`; no `native` or speculative application SHALL be scaffolded.
 - **R1.3** THE FOUNDATION SHALL expose named, directly executable Nx `lint`, `typecheck`, `test`,
   and `build` targets wherever applicable, plus executable `api:e2e`, `web:e2e`,
-  `api:openapi-check`, and database migration-drift targets used by the relevant gates. A target
-  MAY be Nx-inferred or manually declared, but `nx show project` and the workspace contract test
-  SHALL prove the same required name, executor/configuration, and runnable behavior; a package
-  script that Nx cannot invoke SHALL NOT satisfy this criterion.
+  `api:openapi-check`, `api:health-smoke`, and `db:migration-check` targets used by the relevant
+  gates. A target is explicit when it is present in Nx's RESOLVED project configuration, whether it
+  was inferred by a registered plugin or manually declared; `nx show project` and the workspace
+  contract test SHALL prove the same required name, executor/configuration, and runnable behavior,
+  and a package script that Nx cannot invoke SHALL NOT satisfy this criterion. Concretely, `test`
+  SHALL be contributed by `@nx/vitest` 23.1.1 registered as a plugin in `nx.json` with options
+  `{ "testTargetName": "test", "testMode": "run" }`, backed by a committed per-project
+  `vitest.config.*` (or test-configured `vite.config.*`) in every applicable project; `testMode`
+  `run` is required because Vitest defaults to watch mode in an interactive terminal, so only the
+  non-watch mode keeps `pnpm nx run-many -t test` and the gates deterministic and terminating
+  everywhere. Any target backed by a pinned inference plugin MAY be inferred or manually declared,
+  whichever the pinned installation produces: `lint` from `@nx/eslint`, `build` and `typecheck`
+  from `@nx/vite` or `@nx/js`, and — because R1.1 pins `@nx/playwright` at the same 23.1.1
+  release — `e2e` from the `@nx/playwright` plugin's default `e2e` target name, which is the route
+  available to `web:e2e`. Any target with NO pinned inference provider SHALL be manually declared:
+  `api:openapi-check`, `api:health-smoke`, `db:migration-check`, the `testing:compose-smoke`,
+  `testing:neon-parser-check`, `testing:secret-scan`, and `testing:markdown-check` gates, and
+  `api:e2e`, which is a Nest/Testcontainers suite that the `test`-named `@nx/vitest` registration
+  does not contribute. Neither route is privileged; the criterion above — present in
+  `nx show project` output, asserted and invocable through the workspace contract test — remains
+  the only binding one, and Design D3 carries the per-target classification.
 - **R1.4** WHEN generators are used, THE FOUNDATION SHALL explicitly select Vite/Vitest or no
   generated test runner as appropriate and SHALL contain no Jest configuration, dependency, or
   generated Jest test.
@@ -209,8 +226,13 @@ response proves the API can query PostgreSQL.
 - **R6.4** WHEN the Drizzle provider can execute a minimal database probe, GET `/api/v1/health`
   SHALL return HTTP 200 with exactly `{ "status": "ok", "database": "up" }`; IF PostgreSQL is
   unavailable, it SHALL return HTTP 503 with exactly
-  `{ "status": "error", "database": "down" }` without exposing credentials. Terminus MAY own
-  the internal health indicator but its default envelope SHALL NOT become the public wire shape.
+  `{ "status": "error", "database": "down" }` without exposing credentials. A custom Nest
+  controller SHALL own that response, mapping probe success to HTTP 200 and a database exception to
+  a sanitized HTTP 503 whose body IS that exact flat unhealthy variant of the `contracts` health
+  schema and nothing else — no envelope, wrapper, or additional `error`, `message`, `statusCode`,
+  or other key — and THE health endpoint SHALL NOT use the API's global shared error shape.
+  Terminus SHALL NOT appear in the health path or the dependency set. The injected Drizzle probe
+  seam SHALL remain.
 - **R6.5** THE checked-in OpenAPI snapshot SHALL be produced from the running Nest application and
   shared Zod DTOs, passed through `nestjs-zod`'s required `cleanupOpenApiDoc`, and CI SHALL fail on
   an uncommitted contract delta.
@@ -298,13 +320,20 @@ ready before cycles exist so that Phase 1 can wire runtime pings without conflat
   healthchecks.io checks exist: one primary-cycle check and one backup-workflow check. It SHALL
   reuse and identify a correctly configured existing check or create the missing check, without
   renaming either after Windows Scheduled Tasks such as `AIPT-primary-up` or
-  `AIPT-neon-backup`. It SHALL NOT invent cadence or grace values absent from owner configuration;
-  missing values remain incomplete owner evidence rather than guessed configuration.
-- **R10.2** GitHub Secrets SHALL contain distinct placeholders/credentials for
-  `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_IO_PRIMARY_KEY`, `HEALTHCHECKS_IO_BACKUP_KEY`, and the future
-  Android signing set `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
-  and `ANDROID_KEY_PASSWORD`; no real value SHALL appear in documentation, examples, logs, or
-  repository files.
+  `AIPT-neon-backup`. THE recorded evidence SHALL state which path applied per check — identified
+  or created — together with each check's distinct redacted identifier and its role assignment,
+  either primary-cycle or backup-workflow-including-valid-no-op. IF more than two candidate checks
+  exist, or a role is ambiguous, THE task SHALL stop and the owner SHALL designate the canonical
+  pair. It SHALL NOT invent cadence or grace values absent from owner configuration; missing values
+  remain incomplete owner evidence rather than guessed configuration.
+- **R10.2** GitHub Secrets SHALL contain distinct placeholders/credentials for exactly six names:
+  `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_IO_BACKUP_KEY`, and the future Android signing set
+  `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and
+  `ANDROID_KEY_PASSWORD`; no real value SHALL appear in documentation, examples, logs, or
+  repository files. `HEALTHCHECKS_IO_PRIMARY_KEY` SHALL NOT be among them: no Phase-0 or Phase-1
+  GitHub-hosted consumer reads it, so it SHALL live solely in the primary server's gitignored
+  `.env`. Re-adding it SHALL require the same change that amends D-02 to legitimize a GitHub-hosted
+  primary consumer.
 - **R10.3** A public-repository backup workflow SHALL receive only the backup healthcheck credential;
   it SHALL NOT receive or reference the primary credential.
 - **R10.4** Because Phase 0 has no scheduler cycle or backup-lane execution, THE FOUNDATION SHALL

@@ -9,8 +9,12 @@ draft:** rejected.
 > repository carries. Sections 2–8 describe the rejected draft and are kept because the ledger of
 > what was wrong is why the replacement is trustworthy — not as a description of the committed
 > files. Section 9 records the rewrite and its independent verification; §10/§11 preserve the
-> carryover state at those review points. **Section 12 is the current status and closes every §10
-> carryover before implementation.**
+> carryover state at those review points. **Sections 12 and 13 are the current status: §12 closes
+> every §10 carryover before implementation, and §13's decision arena overlays the four items §12
+> left to an implementation-time or owner call. Where the two differ, §13 wins — and where §13's
+> own Q1/Q2 verdict wording differs from its closing “Post-arena corrections” subsection, that
+> subsection wins, because it corrects details the arena stated wrongly — in two rounds, the later
+> of which supersedes the earlier where they differ.**
 
 ## Verdict
 
@@ -301,11 +305,11 @@ surprises. The first six are worth resolving before or during the tasks that tou
 |---|---|---|
 | IC-02 | **Resolved — see §11.** 21 of 33 verify blocks called `pnpm exec vitest run <path>` from the repo root with no task creating a root Vitest `projects` config | Two parts of the original statement were wrong and are corrected in §11: three Nx test commands existed, not one, and Vitest's per-file `@vitest-environment` docblock means the mixed T22 invocation was fragile, not impossible |
 | D10 parser | **Resolved — see §11.** The shared `ConvertFrom-NeonDatabaseUrl` contract enumerated the libpq mapping but omitted the runbook's TLS rules, and marked `PGCHANNELBINDING` required where the runbook treats it as optional | The regression was prospective, not actual: no parser replacement had been written and higher-precedence canon still requires `verify-full` |
-| NEW-01 | **Refuted, no change made.** R10.2 puts `HEALTHCHECKS_IO_PRIMARY_KEY` in the GitHub Secrets of a repo that is public by D-24, though D9 names its only consumer as the home server, which reads a local `.env` | D-24 says "Secrets in GH Secrets" and thereby permits the location; storing a secret is not supplying it to a workflow, and R10.3/T27 already forbid the backup workflow from referencing it. What remains is a YAGNI question for the owner, not a defect: no canonical Phase-0/1 GitHub-hosted consumer needs that key, so dropping it from R10.2/T27/T28 is defensible and would not weaken D-02 |
+| NEW-01 | **Refuted as a defect in §11; settled as a trim — see §13.** R10.2 puts `HEALTHCHECKS_IO_PRIMARY_KEY` in the GitHub Secrets of a repo that is public by D-24, though D9 names its only consumer as the home server, which reads a local `.env` | D-24 says "Secrets in GH Secrets" and thereby permits the location; storing a secret is not supplying it to a workflow, and R10.3/T27 already forbid the backup workflow from referencing it. What remains is a YAGNI question for the owner, not a defect: no canonical Phase-0/1 GitHub-hosted consumer needs that key, so dropping it from R10.2/T27/T28 is defensible and would not weaken D-02 |
 | NEW-03 | No task or gate ever *starts* the local Compose PostgreSQL — it is only ever parsed with `docker compose config --quiet` — yet `api:health-smoke` runs twice in the gate and needs a live database Testcontainers does not supply | A working Compose Postgres is itself a Phase-0 roadmap deliverable |
 | IC-03 | No CI tier actually runs the secret scan: D9 says the `dev` workflow does, R9.1's dev list omits it, and T26 creates `testing:secret-scan` *after* both workflow tasks — so neither workflow could reference it | The Gitleaks gate exists as a local target only |
-| NF-01 / IC-01 | D6 declares a flat `{status, database}` Zod response **and** mandates Terminus, whose `@HealthCheck()` envelope is `{status, info, error, details}`. Both cannot hold, and the checked-in OpenAPI snapshot would document a body the endpoint never returns | Decide at T17/T18: a custom controller returning the flat contract, or adopt the Terminus envelope as the contract |
-| L5 / L10 | R10.1 and T28 ask the owner to *identify* two existing healthchecks.io checks; the roadmap Phase-0 bullet asks for them to be *created* | Round 1's C-05 correction overshot |
+| NF-01 / IC-01 | **Resolved — see §13.** D6 declares a flat `{status, database}` Zod response **and** mandates Terminus, whose `@HealthCheck()` envelope is `{status, info, error, details}`. Both cannot hold, and the checked-in OpenAPI snapshot would document a body the endpoint never returns | Decide at T17/T18: a custom controller returning the flat contract, or adopt the Terminus envelope as the contract |
+| L5 / L10 | **Resolved — see §13.** R10.1 and T28 ask the owner to *identify* two existing healthchecks.io checks; the roadmap Phase-0 bullet asks for them to be *created* | Round 1's C-05 correction overshot |
 | L3 | Playwright is installed but no step installs the browser binaries, though `web:e2e` carries the gate's RTL evidence | First `web:e2e` run fails |
 | L7 | `db:migration-check` runs in CI with no step provisioning `DATABASE_DIRECT_URL`, while the env loader is specified to throw when it is absent | — |
 | L4 | `api:openapi-check` is scheduled on the `main` tier only, so contract drift is not a continuous gate | Canon-compatible (D-20 pins e2e/build to `main`); recorded as a judgement call |
@@ -422,13 +426,13 @@ implementer and verifier. Historical findings above remain unchanged as review e
 
 | §10 item | Final disposition and execution-visible location |
 |---|---|
-| IC-02 / R1.3 | Resolved in §11; R1.3, D3 and T05 now define an explicit target as named, directly executable and proven through Nx. Inferred and manually declared targets are equally valid under that proof. |
+| IC-02 / R1.3 | Resolved in §11; R1.3, D3 and T05 now define an explicit target as named, directly executable and proven through Nx. Inferred and manually declared targets are equally valid under that proof. **Extended by §13** with the concrete procedure: `test` from a registered `@nx/vitest` plugin over per-project config, everything else manually declared. |
 | D10 parser contract | Resolved in §11; D10 and T29 retain the complete fail-closed TLS contract. T29 creates `testing:neon-parser-check`; T30/T33 and the main workflow run it. |
-| NEW-01 | Refuted in §11. R10/D9/T27–T28 make the current seven-secret inventory binding under D-24 while forbidding every workflow from receiving the primary healthcheck key. No hypothetical consumer was invented. |
+| NEW-01 | **Superseded by §13.** This round left the seven-secret inventory binding under D-24; the arena trimmed it to six. R10.2/D9/T27–T28 now exclude `HEALTHCHECKS_IO_PRIMARY_KEY`, which lives only in the primary server's gitignored `.env`, while every workflow is still forbidden from referencing it. No hypothetical consumer was invented. |
 | NEW-03 | R3.5, D3/D5/D8 and T09 add a real Compose lifecycle smoke: start the dummy service, wait for readiness, run `SELECT 1`, then tear down in a finally path. T19 separately owns its PostgreSQL 17 Testcontainer lifecycle. |
 | IC-03 | R9, D8/D9 and T26 require both named workflows to invoke the Gitleaks target; contract tests verify the invocations. |
-| NF-01 / IC-01 | R6, D6 and T17–T19 bind exact flat 200/503 Zod response schemas. Terminus may supply internal readiness machinery but its default envelope is not public API. |
-| L5 / L10 | R10, D9 and T28 define idempotent provisioning: reuse and record a correctly configured owner-controlled check, or create a missing one. Cadence/grace is never guessed. |
+| NF-01 / IC-01 | **Superseded by §13.** This round kept Terminus as internal readiness machinery behind the flat contract; the arena removed it outright. R6, D6 and T17–T19 bind exact flat 200/503 Zod response schemas returned by a custom Nest controller, with Terminus absent from both the response path and the dependency set. |
+| L5 / L10 | R10, D9 and T28 define idempotent provisioning: reuse and record a correctly configured owner-controlled check, or create a missing one. Cadence/grace is never guessed. **Extended by §13** with the per-check recording and ambiguity-stop clauses, and the roadmap bullet reworded to achieved state. |
 | L3 | R8, D8 and T23/T25 install pinned Chromium browser binaries before local and CI Playwright execution. |
 | L7 | R9, D9 and T25 provision ephemeral PostgreSQL 17 URLs for main-gate migration and health work; repository secrets are not used for these checks. |
 | L4 | D9 records OpenAPI snapshot enforcement in the main tier as the accepted D-20 risk-tier choice, rather than an unresolved gap. |
@@ -440,3 +444,150 @@ implementer and verifier. Historical findings above remain unchanged as review e
 **Reconciled verdict:** no §10 item remains open and no listed choice must be invented during
 implementation. PT-002 may start at T01. O-20 remains deliberately open under PT-005 because it is
 a Phase-1 backup-evidence entry condition, not a Phase-0 implementation-start condition.
+
+## 13. Pre-implementation decision arena (2026-08-25)
+
+Before T01, the owner ordered a dual-reviewer arena over the four items §10 and §11 had left to an
+implementation-time or owner call. Two reviewers argued the same four questions: **Claude Fable
+xhigh**, run as a Claude Code subagent, and **GPT 5.6 Sol xhigh**, run through the Codex CLI. Three
+rounds:
+
+1. **Independent positions** — each reviewer answered all four questions without seeing the other.
+2. **Cross-examination** — each received the other's positions under a standing duty to fact-check
+   the claims they rested on, not merely to argue against them.
+3. **Narrowing** — only the one point still contested after round 2 was carried forward.
+
+| id | Question | Outcome |
+|---|---|---|
+| Q1 | NF-01 / IC-01 — flat `{status, database}` contract, or the Terminus envelope | **(a) flat contract.** Unanimous in round 1 |
+| Q2 | R1.3 — what "explicit target" means, and what T05 must create | **Synthesis.** Converged in round 2, after a fact-check reversal |
+| Q3 | L5 / L10 — identify versus create the two healthchecks.io checks | **Ensure-exists.** Substance unanimous in round 1; the roadmap bullet's wording deadlocked and went to the owner |
+| Q4 | NEW-01 — keep or trim `HEALTHCHECKS_IO_PRIMARY_KEY` from the GitHub inventory | **Trim.** Unanimous in round 1 |
+
+### A concurrent session, and the owner's merge ruling
+
+While the arena ran, a parallel session applied its own pre-implementation reconciliation to the
+same four spec files, the ledger and the board — the work recorded in §12 and in ledger note N-19.
+The collision was escalated rather than resolved locally, and the owner ruled **merge**: the
+parallel session's broader promotion of every §10 carryover stands as the base, and this section's
+verdicts overlay it wherever the two disagree. Two N-19 clauses were corrected in place under that
+ruling — Terminus's status, and the size of the secret inventory — and N-19 now points here.
+Nothing else from that reconciliation was reverted.
+
+### Q1 — the health endpoint contract
+
+Both reviewers chose the flat contract in round 1 and neither moved from it. The public contract is
+the `{status, database}` Zod schema owned by `contracts`; a custom Nest controller returns it,
+mapping probe success to HTTP 200 and a database exception to a sanitized HTTP 503 in the shared
+error shape. Nest Terminus leaves the spec entirely — response path and dependency set alike —
+while the injected `DatabaseHealthProbe` seam over the Drizzle provider stays, so R6.4 keeps its
+mechanism.
+
+Applied to `requirements.md` R6.4, whose "Terminus MAY own the internal health indicator"
+permission is replaced by the custom-controller rule; `design.md` D3 (the Terminus documentation
+link) and D6; `tasks.md` T18; and ledger N-19. After that sweep, "Terminus" survives in the
+repository only as history — in this review's own record, in N-19's past-tense note that it was
+removed, and in the season records.
+
+### Q2 — "explicit target", and the fact-check that reversed it
+
+This is the round that justified running an arena rather than a single review. Fable's round-1
+position rested on the Vitest targets being inferred by `@nx/vite`. In round 2 Sol refuted that
+naming with a checked fact: **Nx 23 removed Vitest inference from `@nx/vite` and moved it to a
+separate `@nx/vitest` plugin** (nx.dev migration guide). Both reviewers verified it against nx.dev
+rather than defending a position. Fable's *mechanism* — a plugin-contributed target still counts as
+explicit — survived intact under the corrected plugin name, and the two positions merged into one
+synthesis both reviewers signed. The spec already pinned what the corrected fact requires:
+`@nx/vitest` 23.1.1 sits in T02's plugin set and in R1.1's parity pin.
+
+The converged rule, now carried by R1.3, D3 and T05: a target is *explicit* when it is present in
+Nx's **resolved** project configuration. T05 registers `@nx/vitest` 23.1.1 as a plugin in `nx.json`
+with `testTargetName` `test` and commits a per-project `vitest.config.*` (or test-configured
+`vite.config.*`) for every applicable project, and the T05 workspace-contract test asserts every
+owning project's resolved `test` target. `lint`, `typecheck`, `build`, and the bespoke targets
+(`api:e2e`, `web:e2e`, `api:openapi-check`, `api:health-smoke`, `db:migration-check`) stay manually
+declared, because inference cannot produce them.
+
+This closes the **Carried forward** note left open in §11.
+
+### Q3 — the two healthchecks.io checks, and the wording the owner settled
+
+Both reviewers reached ensure-exists semantics in round 1. The Phase-0 provisioning record ensures
+two distinct healthchecks.io checks exist — identifying any already provisioned, creating any that
+is missing — for the primary-cycle and backup-workflow-including-valid-no-op roles, and records
+which of the two paths applied per check, together with both distinct redacted identifiers and
+their role assignment. If more than two candidate checks or an ambiguous role appear, T28 stops and
+the owner designates the canonical pair. The divorce from the `AIPT-*` Windows Scheduled Task names
+and the bar on invented grace or cadence values are unchanged. Applied to R10.1, D9 and T28.
+
+The wording of the roadmap's own Phase-0 healthchecks bullet **deadlocked 1-1 across rounds 2 and
+3** and was escalated:
+
+- **Fable:** the bullet states a passive end state, so it carries no truth defect; inserting "valid
+  no-op" into it is scope creep against a file this spec does not own.
+- **Sol:** "created" misstates the branch where a check already exists, and achieved-state wording
+  is the precise contract the phase gate should be read against.
+
+**The owner chose the achieved-state rewording.** The Phase-0 bullet in `docs/roadmap.md` now reads
+"Two distinct healthchecks.io checks exist for primary cycles and the backup workflow (including
+valid no-op); bot token & keystore secrets in GitHub Secrets." That one bullet is the only change
+made to the roadmap.
+
+### Q4 — trimming the primary healthcheck key
+
+Unanimous in round 1, and it converts §11's refuted-but-unsettled NEW-01 into a decision.
+`HEALTHCHECKS_IO_PRIMARY_KEY` is trimmed from R10.2, from T27's secret-name inventory, and from
+T28's `$required` list, and its row is removed from D9's secret-inventory table, leaving a
+six-name inventory. The key lives solely in the primary server's gitignored `.env`. Deliberately
+kept is the name *as the thing being forbidden*: R10.3's prohibition, T27's negative test that no
+workflow ever references it, and D9's sentence that a public backup workflow must never reference,
+receive, or print it. Reopen path: if a ledger amendment ever legitimizes a GitHub-hosted primary
+consumer — amending D-02 first — the key is re-added in that same change.
+
+### Net effect
+
+`NF-01 / IC-01` and `L5 / L10` are marked resolved in §10 and superseded where §12 stated them
+differently; `NEW-01`, refuted as a defect in §11 and left binding in §12, is settled as a trim.
+§12's closure of the remaining §10 rows stands unchanged. No ledger decision was reopened: D-02's
+two-independent-checks property survives both the healthchecks verdict and the secret trim, D-24
+permits but never required the trimmed key, and O-20 remains open under PT-005 as a Phase-1
+backup-evidence entry condition. PT-002 is cleared to start at T01.
+
+### Post-arena corrections (owner-forwarded review, 2026-08-25)
+
+After the merge, an external review forwarded by the owner found four defects in the merged spec
+text. All four are corrected in `requirements.md`, `design.md` and `tasks.md`. The Q1 and Q2 verdict
+wording recorded above is left intact as the historical record of what the arena decided, and
+**these corrections supersede it wherever the two differ** — specifically Q2's “`lint`, `typecheck`,
+`build` … stay manually declared, because inference cannot produce them”, and Q1's “in the shared
+error shape” for the 503 body. Both phrases were wrong; the rows below are what binds.
+
+| id | Correction | Fact basis |
+|---|---|---|
+| C1 | The `@nx/vitest` 23.1.1 registration in `nx.json` now carries the options `{ "testTargetName": "test", "testMode": "run" }`, so `pnpm nx run-many -t test` and the gates terminate instead of dropping into watch mode. Applied to R1.3, D3, T05 | The plugin's `testMode` option is documented on nx.dev, which recommends `run` for deterministic non-watch runs; Vitest itself defaults to watch in an interactive terminal |
+| C2 | “manually declared, because inference cannot produce them” was false for the standard targets and is replaced: `test` (via `@nx/vitest`) plus `lint`, `typecheck` and `build` MAY be plugin-inferred or manually declared, judged only by N-19's criterion — the target appears in `nx show project` output and the T05 workspace-contract test asserts and can invoke the resolved target set. ONLY the bespoke targets (`api:e2e`, `web:e2e`, `api:openapi-check`, `api:health-smoke`, `db:migration-check`) must be manually declared. The per-project committed `vitest.config.*` requirement is unchanged. Applied to R1.3, D3, T05 | The pinned Nx plugins do infer these: `@nx/eslint` infers `lint`, and `@nx/vite`/`@nx/js` can infer build and typecheck |
+| C3 | T28's secret verification is now two-sided: it asserts the six required names are present **and** that `HEALTHCHECKS_IO_PRIMARY_KEY` is absent from GitHub Secrets, and the recorded evidence confirms that the same NAME is present in the primary server's gitignored `.env` — name only, value never copied, logged, or recorded. Applied to T28 | Q4 trimmed the key from the inventory, but a presence-only check still passes with a leftover copy sitting in GitHub, which left the trim unverifiable as written |
+| C4 | The unhealthy health response is no longer described as “in the shared error shape”. The 503 body IS the exact flat unhealthy variant of the `contracts` health schema — `{ status: 'error', database: 'down' }` — with no envelope and no additional field; the endpoint does not use the API's global shared error shape. Applied to R6.4, D6, T18 | Q1 chose the flat contract, but the surviving phrase let a reader reintroduce the very envelope Q1 had removed |
+
+R10.2 and D9 were deliberately left unchanged: they state inventory and value-handling semantics
+rather than verification mechanics, and both C3 assertions verify clauses those two already carry
+(“exactly six names”, “SHALL live solely in the primary server's gitignored `.env`”, and “no real
+value SHALL appear in documentation, examples, logs, or repository files”). No ledger decision is
+reopened, and no §12 or §13 outcome changes beyond the four details above.
+
+#### Round 2 (same day) — two residual defects
+
+A second owner-forwarded review over the corrected text found two defects that survived round 1.
+They are recorded as their own round rather than by editing the rows above. **Row C2 is superseded
+by C5:** C2's closing sentence (“ONLY the bespoke targets … must be manually declared”) still
+asserted the five-name closed list, which C5 replaces with a class rule — and §12's “everything
+else manually declared” phrasing falls with it. C3 is superseded by C6 on verification mechanics
+only; its two-sided intent stands and is strengthened.
+
+| id | Correction | Fact basis |
+|---|---|---|
+| C5 | The closed five-target “bespoke must be manual” list is replaced by a class rule: a target backed by a pinned inference plugin — `test` via `@nx/vitest`, `lint` via `@nx/eslint`, `build`/`typecheck` via `@nx/vite`/`@nx/js`, `e2e` via `@nx/playwright` — MAY be inferred or manually declared, and only a target with no pinned inference provider MUST be declared by hand. Under these pins that manual set is `api:openapi-check`, `api:health-smoke`, `db:migration-check`, `testing:compose-smoke`, `testing:neon-parser-check`, `testing:secret-scan`, `testing:markdown-check`, and `api:e2e`. N-19's criterion is unchanged and remains the only binding one; the committed per-project `vitest.config.*` requirement and the `testMode: "run"` registration are untouched. Applied to R1.3, D3, T05, with D3 carrying the enumeration and the other two referencing the rule | `@nx/playwright` is pinned at 23.1.1 by R1.1's parity pin and T02's plugin set, and its plugin infers an `e2e` target under the default target name `e2e`, so `web:e2e` was wrongly listed as un-inferrable. The same list omitted four genuinely manual targets the spec creates elsewhere — `testing:compose-smoke` (T09), `testing:secret-scan` (T26), `testing:neon-parser-check` (T29), `testing:markdown-check` (T31) — leaving it both over- and under-inclusive. `api:e2e` stays manual: it is a Nest/Testcontainers suite, and the registered `@nx/vitest` options contribute `test`, not `e2e` |
+| C6 | T28's two secret verifications are now executable rather than illustrative. The `.env` block pins `$envPath` to `C:\ops\ai-price-tracker\.env`; the GitHub block compares the secret set for exact equality with the six names — missing name, the named forbidden key, or any other unexpected name each fail — instead of asserting presence only; and the `.env` block asserts that `HEALTHCHECKS_IO_PRIMARY_KEY` is present AND non-empty by measuring the matched line's length past the `=`, emitting only a fixed OK line. Both blocks stay PowerShell 5.1/7 compatible. Applied to T28 | `$envPath` was undefined, so that block could not run as written; the runbook establishes the canonical ops root (`C:\ops\ai-price-tracker`, its `backup-neon.ps1` `$envPath`, and its §5 audit snippet's literal path). R10.2 says *exactly* six names, which a six-present check does not verify — an unexpected seventh secret passed. And `HEALTHCHECKS_IO_PRIMARY_KEY=` with an empty value satisfied a name-only match, certifying an unusable key as provisioned. The value is still never printed, logged, or recorded |
+
+No ledger decision is reopened by this round, and no §12 or §13 outcome changes beyond the two
+details above.

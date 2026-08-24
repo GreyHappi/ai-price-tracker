@@ -82,14 +82,23 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   pnpm nx run-many -t lint,typecheck,build --projects=contracts,domain,db,scraping,ai,i18n,notifications,testing
   ```
 
-- [ ] **T05 — Install and wire the Phase-0 test harness.** Configure Vitest targets for frontend,
-  backend, and libraries; install PostgreSQL Testcontainers, targeted `fast-check`, React Testing
-  Library, MSW, and Playwright dependencies without Jest; and add a workspace contract test that
-  asserts the exact project set, version pins, and absence of Jest artifacts. For every required
-  target, assert the stable target name and runnable configuration reported by `nx show project`;
-  inferred and manually declared targets are both valid under that same proof. Do not add a
-  repository-wide coverage threshold. **Refs:** R1.3–R1.4, R8.1–R8.5;
-  D3, D8.
+- [ ] **T05 — Install and wire the Phase-0 test harness.** Register `@nx/vitest` 23.1.1 as a plugin
+  in `nx.json` with options `{ "testTargetName": "test", "testMode": "run" }`, and commit a
+  per-project `vitest.config.*` (or test-configured `vite.config.*`) for every applicable frontend,
+  backend, and library project. `testMode` `run` is mandatory: Vitest defaults to watch mode in an
+  interactive terminal, and only the non-watch mode keeps `pnpm nx run-many -t test` and the gates
+  deterministic and terminating on every machine. Install PostgreSQL Testcontainers, targeted
+  `fast-check`, React Testing Library, MSW, and Playwright dependencies without Jest. Add a
+  workspace contract test that asserts the exact project set, version pins, absence of Jest
+  artifacts, and every owning project's RESOLVED `test` target as reported by `nx show project` —
+  resolved configuration is the proof, whether a target was plugin-inferred or manually declared.
+  `lint`, `typecheck`, `build`, and `web:e2e` may arrive either way, whichever the pinned plugins
+  produce — `@nx/playwright` is pinned and its plugin infers an `e2e` target — so assert and invoke
+  the resolved target set regardless of provenance. Declare by hand only the targets D3 classes as
+  having no pinned inference provider, and never treat a plugin-inferred target as a defect when
+  its resolved name, configuration, and runnable behavior match. Do not add a repository-wide
+  coverage threshold.
+  **Refs:** R1.3–R1.4, R8.1–R8.5; D3, D8.
 
   **Verify:**
 
@@ -278,10 +287,14 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   ```
 
 - [ ] **T18 — Implement the loopback Drizzle health endpoint.** Configure global prefix `api`, URI
-  versioning default `1`, controller path only `health`, and default host `127.0.0.1`. Implement the
-  Terminus custom indicator over the injected Drizzle probe, but do not expose Terminus's default
-  `@HealthCheck()` envelope. Map the internal result to T17's exact flat 200/503 DTOs. Do not
-  install TypeORM or hardcode `api/v1` in the controller. **Refs:** R6.2–R6.4; D6.
+  versioning default `1`, controller path only `health`, and default host `127.0.0.1`. Implement a
+  custom health controller over the injected Drizzle probe seam and map its result to T17's exact
+  flat 200/503 DTOs: probe success to HTTP 200, a database exception to a sanitized HTTP 503 whose
+  body is exactly `{ status: 'error', database: 'down' }` and nothing more. The health endpoint does
+  not use the API's global shared error shape — add no envelope, no `error`/`message`/`statusCode`
+  field, and no exception filter over this route — and `health-controller.spec.ts` asserts both
+  response bodies exactly. Do not install Terminus or TypeORM, and do not hardcode `api/v1` in the
+  controller. **Refs:** R6.2–R6.4; D6.
 
   **Verify:**
 
@@ -411,9 +424,11 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   ```
 
 - [ ] **T27 — Record and enforce secret names and scopes without values.** Add a repository secret
-  inventory containing only the seven D9 names/scopes. Extend environment/workflow contract tests
-  so no browser bundle receives a server secret and any backup workflow is rejected if it references
-  `HEALTHCHECKS_IO_PRIMARY_KEY`; do not create a placeholder backup schedule or ping implementation.
+  inventory containing only the six D9 names/scopes; `HEALTHCHECKS_IO_PRIMARY_KEY` is deliberately
+  absent, because it lives solely in the primary server's gitignored `.env`. Extend
+  environment/workflow contract tests so no browser bundle receives a server secret and any workflow
+  is rejected if it references `HEALTHCHECKS_IO_PRIMARY_KEY` — the name appears in this task only as
+  the thing being forbidden. Do not create a placeholder backup schedule or ping implementation.
   Ensure `.env`, Compose, docs, and build output remain covered by secret scanning. **Refs:** R3.6,
   R10.2–R10.4; D9.
 
@@ -427,22 +442,56 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 - [ ] **T28 — Provision and verify owner-controlled external settings.** This task is external and
   must not place values or full ping URLs in the repository. Ensure two distinct healthchecks.io
   checks exist with the roles “primary cycle” and “backup workflow including valid no-op”: reuse
-  and record a correctly configured existing check or create a missing one. Retain owner-selected
+  and record a correctly configured existing check or create a missing one. Record which path
+  applied for each check — identified or created — along with each check's distinct redacted
+  identifier and its role assignment. If more than two candidate checks exist or a role is
+  ambiguous, stop and have the owner designate the canonical pair. Retain owner-selected
   names/cadence/grace without renaming checks after `AIPT-primary-up`/`AIPT-neon-backup`; if those
-  values are unavailable, leave owner evidence incomplete instead of guessing. Add all seven
-  secret names to GitHub, keep the primary key outside the public backup workflow, and enable
-  GitHub secret scanning plus push protection.
+  values are unavailable, leave owner evidence incomplete instead of guessing. Add the six
+  secret names to GitHub, keep `HEALTHCHECKS_IO_PRIMARY_KEY` out of GitHub Secrets entirely — it
+  lives only in the primary server's gitignored `.env` — and enable GitHub secret scanning plus
+  push protection. The secret verification is an exact-set comparison and a presence-only check does
+  not satisfy it: R10.2 says EXACTLY six names, so the check SHALL fail on a missing required name,
+  on `HEALTHCHECKS_IO_PRIMARY_KEY`, and on any other unexpected secret name, so that a leftover copy
+  of a trimmed or forgotten key fails the check instead of passing it. The recorded evidence SHALL
+  also confirm that the `HEALTHCHECKS_IO_PRIMARY_KEY` NAME is present in the primary server's
+  gitignored `.env` AND that its value is non-empty, proven by testing the length of the matched
+  line past the `=`; the value itself is never printed, copied, logged, or recorded anywhere.
   O-20 remains open and no third check is provisioned by this task. **Refs:** R9.5, R10.1–R10.5;
   D9, D11.
 
-  **Owner-controlled external verify — GitHub secret names:**
+  **Owner-controlled external verify — the GitHub secret set is exactly the six names:**
 
   ```powershell
-  $required = @('TELEGRAM_BOT_TOKEN','HEALTHCHECKS_IO_PRIMARY_KEY','HEALTHCHECKS_IO_BACKUP_KEY','ANDROID_KEYSTORE_BASE64','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD')
+  $required = @('TELEGRAM_BOT_TOKEN','HEALTHCHECKS_IO_BACKUP_KEY','ANDROID_KEYSTORE_BASE64','ANDROID_KEYSTORE_PASSWORD','ANDROID_KEY_ALIAS','ANDROID_KEY_PASSWORD')
   $actual = @((gh secret list --json name | ConvertFrom-Json).name)
   $missing = @($required | Where-Object { $_ -notin $actual })
   if ($missing.Count -ne 0) { throw "Missing GitHub Secrets: $($missing -join ', ')" }
+  if ('HEALTHCHECKS_IO_PRIMARY_KEY' -in $actual) { throw 'HEALTHCHECKS_IO_PRIMARY_KEY must not exist in GitHub Secrets' }
+  $unexpected = @($actual | Where-Object { $_ -notin $required })
+  if ($unexpected.Count -ne 0) { throw "Unexpected GitHub Secrets beyond the six-name inventory: $($unexpected -join ', ')" }
   ```
+
+  **Owner-controlled external verify — the trimmed key is set and non-empty in the primary
+  server `.env`:**
+
+  ```powershell
+  # Run on the primary Windows server. This is the gitignored ops .env from
+  # docs/runbooks/windows-server.md, never the repository checkout; adjust only if the
+  # runbook's C:\ops\ai-price-tracker root was relocated.
+  $envPath = 'C:\ops\ai-price-tracker\.env'
+  $primaryLine = Get-Content -LiteralPath $envPath |
+    Where-Object { $_ -match '^\s*HEALTHCHECKS_IO_PRIMARY_KEY\s*=' } | Select-Object -First 1
+  if (-not $primaryLine) { throw 'HEALTHCHECKS_IO_PRIMARY_KEY is missing from the primary server .env' }
+  # Length only: the matched value is measured, never assigned to an output or a log.
+  $hasValue = ($primaryLine -replace '^\s*HEALTHCHECKS_IO_PRIMARY_KEY\s*=\s*', '').Trim().Trim('"').Trim("'").Length -gt 0
+  if (-not $hasValue) { throw 'HEALTHCHECKS_IO_PRIMARY_KEY is present but empty in the primary server .env' }
+  'HEALTHCHECKS_IO_PRIMARY_KEY: name present, value non-empty'
+  ```
+
+  Record only that boolean result — the name was found with a non-empty value. The value is never
+  printed, copied into evidence, or committed anywhere, and the `.env` file itself never enters the
+  repository.
 
   **Owner-controlled external verify — repository security settings:**
 

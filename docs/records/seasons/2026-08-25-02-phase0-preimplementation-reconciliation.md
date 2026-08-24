@@ -48,3 +48,9 @@ owned by PT-005 as a Phase-1 backup-evidence entry condition.
 
 The PT-002 implementation season may start at T01 and proceed in task order. The only remaining
 owner decision named by this reconciliation is O-20, and it does not block Phase 0.
+
+_Postscript (2026-08-25): the same-day decision arena superseded two points recorded here — Terminus
+is removed from the health path and dependency set entirely, and the secret inventory is trimmed to
+six, with `HEALTHCHECKS_IO_PRIMARY_KEY` held only in the primary server's gitignored `.env`; see
+[review.md §13](../../../.kiro/specs/PT-002-phase-0-foundation/review.md) and
+[record #03](./2026-08-25-03-decision-arena.md)._

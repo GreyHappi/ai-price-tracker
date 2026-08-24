@@ -141,14 +141,17 @@
   review items were promoted from `review.md` into execution-visible requirements/design/tasks
   before T01. “Explicit Nx target” means a stable named target that `nx show project` exposes and a
   contract test can invoke; inferred and manually declared targets are equally valid under that
-  proof. The public health wire contract remains the flat Zod-owned
-  `{status,database}` shape while Terminus is internal machinery, not the response envelope.
-  Healthcheck provisioning is idempotent: reuse/record a correctly configured check or create a
-  missing one, never guess owner cadence/grace. The D-24-permitted seven-secret inventory remains
-  binding and no workflow may receive the primary key. Compose operability, Playwright browser
-  provisioning, CI Gitleaks invocation, ephemeral CI database URLs, parser/Markdown gates,
-  workflow names, and traceability were made explicit. OpenAPI remains main-tier by D-20. O-20 is
+  proof. The public health wire contract is the flat Zod-owned `{status,database}` shape returned by
+  a custom Nest controller; Terminus is removed from the health path and the dependency set
+  entirely. Healthcheck provisioning is idempotent: reuse/record a correctly configured check or
+  create a missing one, never guess owner cadence/grace. The GitHub secret inventory is trimmed to
+  six: `HEALTHCHECKS_IO_PRIMARY_KEY` lives only in the primary server's gitignored `.env`, and no
+  workflow may reference it. Compose operability, Playwright browser provisioning, CI Gitleaks
+  invocation, ephemeral CI database URLs, parser/Markdown gates, workflow names, and traceability
+  were made explicit. OpenAPI remains main-tier by D-20. O-20 is
   unchanged and remains the only owner decision carried toward the Phase-1 backup-evidence path.
+  The two clauses above reached this wording through the 2026-08-25 decision arena, which settled
+  the four contested pre-implementation items; see `review.md` §13.
 
 ---
 

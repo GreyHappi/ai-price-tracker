@@ -91,10 +91,28 @@ record the resolved noninteractive commands in the task evidence; accepting an i
 is not equivalent to these choices.
 
 “Explicit target” describes the observable Nx contract, not how the target entered project
-configuration. A plugin-inferred target is acceptable only when `nx show project` exposes the
-required stable name and configuration and the workspace contract test invokes it successfully.
-A manually declared target is equally acceptable under the same proof. A package script or tool
-command outside the Nx project graph is not a target.
+configuration: a target is explicit when it is present in Nx's resolved project configuration.
+A plugin-inferred target is acceptable only when `nx show project` exposes the required stable name
+and configuration and the workspace contract test invokes it successfully. A manually declared
+target is equally acceptable under the same proof. A package script or tool command outside the Nx
+project graph is not a target. Concretely, `test` is contributed by the `@nx/vitest` plugin
+registered in `nx.json` with options `{ "testTargetName": "test", "testMode": "run" }` over a
+committed per-project Vitest configuration. `testMode` `run` is not optional: Vitest defaults to
+watch mode in an interactive terminal, and a watching `test` target would hang
+`pnpm nx run-many -t test` and every gate built on it, so the non-watch mode is what makes those
+runs deterministic and terminating on every machine.
+
+Target provenance follows a class rule, not a closed list of exceptions. A target backed by a
+pinned inference plugin may be inferred or declared by hand, whichever the pinned installation
+produces: `@nx/vitest` contributes `test`, `@nx/eslint` infers `lint`, `@nx/vite`/`@nx/js` can
+infer `build` and `typecheck`, and `@nx/playwright` — pinned at 23.1.1 in the same parity set and
+configured for `web` above — infers an `e2e` target under its default `e2e` target name, which is
+the route available to `web:e2e`. A target with no pinned inference provider must be manually
+declared; under these pins those are `api:openapi-check`, `api:health-smoke`, `db:migration-check`,
+`testing:compose-smoke`, `testing:neon-parser-check`, `testing:secret-scan`,
+`testing:markdown-check`, and `api:e2e` — the last because it is a Nest/Testcontainers suite and
+the registered `@nx/vitest` options contribute `test`, not `e2e`. Neither route is privileged: in
+both cases the proof above is the only binding criterion.
 
 ### Target contract
 
@@ -127,7 +145,6 @@ Official verification sources: [Node releases](https://nodejs.org/en/about/previ
 [Nx module boundaries](https://nx.dev/docs/features/enforce-module-boundaries), and
 [Nx Playwright configuration](https://nx.dev/technologies/test-tools/playwright/introduction),
 [Nest URI versioning](https://docs.nestjs.com/techniques/versioning),
-[Nest Terminus](https://docs.nestjs.com/recipes/terminus),
 [`nestjs-zod`](https://github.com/BenLorantfy/nestjs-zod),
 [`eslint-plugin-i18next` rule options](https://github.com/edvardchen/eslint-plugin-i18next/blob/master/docs/rules/no-literal-string.md), and
 [Gitleaks](https://github.com/gitleaks/gitleaks).
@@ -321,12 +338,15 @@ interface OpenApiSnapshotAdapter {
 `contracts` owns the Zod 4 schema and JSON shape. The Nest adapter uses pinned
 `nestjs-zod` 5.5.0 to derive DTO/OpenAPI metadata from it; there is no handwritten duplicate DTO.
 The document returned by `SwaggerModule.createDocument` passes through `cleanupOpenApiDoc` before
-snapshot comparison or Swagger setup. The database indicator uses the injected Drizzle provider
-to execute a minimal query. Terminus supplies the internal indicator/aggregation machinery, but the
-controller does not expose the framework's default `@HealthCheck()` envelope. It maps success to
-the exact shared `{ status: 'ok', database: 'up' }` DTO and a database exception to HTTP 503 with
-the exact shared `{ status: 'error', database: 'down' }` DTO. TypeORM and its health indicator are
-absent.
+snapshot comparison or Swagger setup. The `DatabaseHealthProbe` seam uses the injected Drizzle
+provider to execute a minimal query. A custom Nest controller owns the entire response: it maps
+probe success to the exact shared `{ status: 'ok', database: 'up' }` DTO with HTTP 200, and a
+database exception to a sanitized HTTP 503 whose body is the exact flat unhealthy variant of that
+same `contracts` schema — `{ status: 'error', database: 'down' }` — with no additional fields. The
+health endpoint deliberately does not use the API's global shared error shape: neither response may
+gain an envelope, an `error`/`message`/`statusCode` key, or an exception-filter wrapper. Nest
+Terminus is absent from both the response path and the dependency set, so no framework envelope can
+reach the wire. TypeORM and its health indicator are equally absent.
 
 `api:openapi-check` creates the application in a deterministic documentation profile, derives and
 normalizes OpenAPI, compares it with the committed snapshot, and exits nonzero on any delta. It is
@@ -437,26 +457,31 @@ external evidence in addition to CI.
 | GitHub Secret name | Phase-0 purpose | Allowed consumer |
 |---|---|---|
 | `TELEGRAM_BOT_TOKEN` | future bot provisioning | server/notification jobs only; no browser bundle |
-| `HEALTHCHECKS_IO_PRIMARY_KEY` | primary-cycle check | primary/server deployment only |
 | `HEALTHCHECKS_IO_BACKUP_KEY` | backup-workflow check | backup workflow only |
 | `ANDROID_KEYSTORE_BASE64` | future signed Android build placeholder | Phase-3 protected signing job only |
 | `ANDROID_KEYSTORE_PASSWORD` | future keystore password | Phase-3 protected signing job only |
 | `ANDROID_KEY_ALIAS` | future signing alias | Phase-3 protected signing job only |
 | `ANDROID_KEY_PASSWORD` | future key password | Phase-3 protected signing job only |
 
-Only names and scopes are tracked; values are never copied into a file or evidence log. A public
-backup workflow must never reference, receive, or print `HEALTHCHECKS_IO_PRIMARY_KEY`. Browser code
-receives none of these values. `.env`, Compose interpolation, logs, OpenAPI, test reports, and docs
-are scanned for leakage. D-24 permits repository-secret storage, and the Phase-0 inventory keeps
-the primary key while forbidding every current workflow from receiving it; absent a later owner
-amendment, this specified behavior is not an open implementation choice.
+Only names and scopes are tracked; values are never copied into a file or evidence log. The
+inventory is exactly these six names. `HEALTHCHECKS_IO_PRIMARY_KEY` is deliberately not among them:
+no Phase-0 or Phase-1 GitHub-hosted consumer reads it, so it lives solely in the primary server's
+gitignored `.env`, and a public backup workflow must never reference, receive, or print it. Browser
+code receives none of these values. `.env`, Compose interpolation, logs, OpenAPI, test reports, and
+docs are scanned for leakage. D-24 permits repository-secret storage but does not require this key
+to occupy it; trimming it therefore leaves D-02's two-independent-checks property untouched. Absent
+an owner amendment that amends D-02 to legitimize a GitHub-hosted primary consumer — which would
+re-add the key in that same change — this specified behavior is not an open implementation choice.
 
 ### Healthchecks.io boundary
 
 Phase 0 ensures two distinct owner-provisioned checks exist: primary cycle and backup workflow
 (including eventual valid no-op). T28 reuses and records a correctly configured existing check or
-creates a missing one; it never renames one after a Windows Scheduled Task. The spec does not
-prescribe grace or cadence values, and incomplete owner configuration is not guessed. Because no
+creates a missing one; it never renames one after a Windows Scheduled Task. Its evidence records
+which path applied per check — identified or created — plus each check's distinct redacted
+identifier and role assignment. More than two candidate checks, or an ambiguous role, stops the
+task for the owner to designate the canonical pair. The spec does not prescribe grace or cadence
+values, and incomplete owner configuration is not guessed. Because no
 cycle exists in Phase 0, there is no ping client, placeholder scheduled workflow, or direct
 outbound `fetch`. Phase 1 wires successful terminal paths through the D-15 shared HTTP wrapper:
 primary only after its complete success conditions, backup after successful completion including

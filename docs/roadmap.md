@@ -34,8 +34,8 @@ Unsupported findings are recorded honestly; no missing MVP source is waved throu
 - Docs live: AGENTS/CLAUDE/CONTEXT, ledger, ADR 0001–0007, prompts, and current board
   (manual — O-07: automation deferred until ≥5 active stories or the first status drift).
 - `.kiro/steering/` seeded from CONTEXT.md + canonical plan.
-- Separate healthchecks.io checks created for primary cycles and backup workflow (including no-op);
-  bot token & keystore secrets in GitHub Secrets.
+- Two distinct healthchecks.io checks exist for primary cycles and the backup workflow (including
+  valid no-op); bot token & keystore secrets in GitHub Secrets.
 
 **Gate:** `pnpm nx run-many -t lint,typecheck,test` green locally and in CI ·
 `/api/v1/health` → 200 · empty dashboard renders in LTR **and** RTL (the Phase-0 shell carries
