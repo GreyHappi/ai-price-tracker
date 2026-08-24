@@ -89,7 +89,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/workspace.contract.spec.ts
+  pnpm nx test testing -- workspace.contract.spec.ts
   pnpm nx run-many -t test
   ```
 
@@ -113,7 +113,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/boundaries.contract.spec.ts
+  pnpm nx test testing -- boundaries.contract.spec.ts
   ```
 
 ## Environment, database, and schema
@@ -129,7 +129,9 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/db/src/environment.spec.ts apps/api/src/environment-startup.spec.ts apps/worker/src/environment-startup.spec.ts
+  pnpm nx test db -- environment.spec.ts
+  pnpm nx test api -- environment-startup.spec.ts
+  pnpm nx test worker -- environment-startup.spec.ts
   ```
 
 - [ ] **T09 — Add the safe PostgreSQL 17 local Compose profile.** Create the Compose service,
@@ -143,7 +145,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 
   ```powershell
   docker compose --env-file .env.example config --quiet
-  pnpm exec vitest run packages/testing/src/contracts/compose.contract.spec.ts
+  pnpm nx test testing -- compose.contract.spec.ts
   ```
 
 - [ ] **T10 — Add the pooled Drizzle runtime provider.** Implement `createDatabaseRuntime` in
@@ -154,7 +156,9 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/db/src/runtime.integration.spec.ts apps/api/src/database-provider.spec.ts apps/worker/src/database-provider.spec.ts
+  pnpm nx test db -- runtime.integration.spec.ts
+  pnpm nx test api -- database-provider.spec.ts
+  pnpm nx test worker -- database-provider.spec.ts
   ```
 
 - [ ] **T11 — Define shared schema-value contracts.** In `contracts`, define Zod contracts for
@@ -169,7 +173,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/contracts/src/schema-values.spec.ts
+  pnpm nx test contracts -- schema-values.spec.ts
   pnpm nx typecheck contracts
   ```
 
@@ -183,21 +187,22 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/db/src/schema/core-targets.contract.spec.ts
+  pnpm nx test db -- core-targets.contract.spec.ts
   pnpm nx typecheck db
   ```
 
 - [ ] **T13 — Declare observation, event, and outbox tables.** Add `observations`, `change_events`,
   and `notification_deliveries` with the exact D4 fields, exact four-field hash contract,
   observation-chain NULLS-NOT-DISTINCT uniqueness, unique event observation, unique delivery
-  dedupe, and pending/sending/sent/failed lease-and-attempt checks. All history/outbox FKs use
+  dedupe, and pending/sending/sent/failed lease-and-attempt checks. Record D4's stable dedupe inputs
+  without implementing enqueue or inventing the future rule model. All history/outbox FKs use
   `NO ACTION`/`RESTRICT`, never cascade delete. Do not add a snapshot lifecycle column or raw
   response field. **Refs:** R4.3, R4.6–R4.7, R4.9–R4.10; D4.
 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/db/src/schema/history-outbox.contract.spec.ts
+  pnpm nx test db -- history-outbox.contract.spec.ts
   pnpm nx typecheck db
   ```
 
@@ -213,7 +218,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/db/src/schema/run-support.contract.spec.ts packages/db/src/schema/schema-v1.contract.spec.ts
+  pnpm nx test db -- run-support.contract.spec.ts schema-v1.contract.spec.ts
   pnpm nx typecheck db
   ```
 
@@ -244,7 +249,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/db/src/migrations/migrations.integration.spec.ts
+  pnpm nx test db -- migrations.integration.spec.ts
   ```
 
 ## API and web shell
@@ -258,7 +263,8 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/contracts/src/health.spec.ts apps/api/src/health/health-dto.spec.ts
+  pnpm nx test contracts -- health.spec.ts
+  pnpm nx test api -- health-dto.spec.ts
   pnpm nx typecheck api
   ```
 
@@ -270,7 +276,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run apps/api/src/health/health-controller.spec.ts apps/api/src/bootstrap.spec.ts
+  pnpm nx test api -- health-controller.spec.ts bootstrap.spec.ts
   pnpm nx typecheck api
   ```
 
@@ -299,7 +305,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/i18n/src/i18n-core.spec.ts
+  pnpm nx test i18n -- i18n-core.spec.ts
   pnpm nx lint i18n -- --max-warnings=0
   ```
 
@@ -314,7 +320,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/hardcoded-user-string.contract.spec.ts
+  pnpm nx test testing -- hardcoded-user-string.contract.spec.ts
   pnpm nx lint web -- --max-warnings=0
   ```
 
@@ -326,7 +332,8 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run apps/web/src/app/phase-zero-shell.spec.tsx packages/testing/src/msw/msw-harness.spec.ts
+  pnpm nx test web -- phase-zero-shell.spec.tsx
+  pnpm nx test testing -- msw-harness.spec.ts
   ```
 
 - [ ] **T23 — Add and invoke real-browser LTR/RTL Playwright coverage.** Configure the actual
@@ -354,7 +361,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/dev-workflow.contract.spec.ts
+  pnpm nx test testing -- dev-workflow.contract.spec.ts
   ```
 
 - [ ] **T25 — Implement the `main` phase-gate CI tier.** On pushes/merges to `main` and manual
@@ -367,7 +374,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/main-workflow.contract.spec.ts
+  pnpm nx test testing -- main-workflow.contract.spec.ts
   ```
 
 - [ ] **T26 — Add real Gitleaks history and working-tree gates.** Pin Gitleaks 8.30.1 in the
@@ -380,7 +387,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 
   ```powershell
   pnpm nx run testing:secret-scan
-  pnpm exec vitest run packages/testing/src/contracts/secret-scan.contract.spec.ts
+  pnpm nx test testing -- secret-scan.contract.spec.ts
   ```
 
 - [ ] **T27 — Record and enforce secret names and scopes without values.** Add a repository secret
@@ -393,7 +400,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/secret-scope.contract.spec.ts
+  pnpm nx test testing -- secret-scope.contract.spec.ts
   pnpm nx run testing:secret-scan
   ```
 
@@ -436,8 +443,13 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   Update the setup section in `docs/runbooks/windows-server.md` to copy that committed file from the
   checkout into `C:\ops\ai-price-tracker\parse-neon-url.ps1` and fail unless the destination exists.
   Update the saved `backup-neon.ps1` block and section 5 audit snippet to dot-source that installed
-  parser; remove their duplicate parse blocks. Preserve the existing libpq variable mapping,
-  including channel binding and mapped optional parameters. The self-test must statically assert the
+  parser; remove their duplicate parse blocks. Preserve the existing libpq variable mapping, with
+  channel binding and the other mapped optional parameters emitted only when supplied. Preserve the
+  runbook's TLS behaviour exactly — default an omitted `sslmode` to `require`, throw on empty values,
+  unsupported query parameters, `disable|allow|prefer`, and unrecognized modes, and normalize
+  `require`/`verify-ca`/`verify-full` alike to `verify-full` — because deleting the duplicated blocks
+  otherwise regresses PT-004's verified-TLS guarantee. The self-test must cover each of those
+  rejection and normalization cases, and must statically assert the
   setup copy, existence guard, and both dot-source callers. This closes PT-003's board instruction
   without changing unrelated runbook behavior. **Refs:** R11.2–R11.3; D10.
 
@@ -479,7 +491,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/steering.contract.spec.ts
+  pnpm nx test testing -- steering.contract.spec.ts
   pnpm nx run testing:markdown-check
   ```
 
@@ -492,7 +504,7 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   **Verify:**
 
   ```powershell
-  pnpm exec vitest run packages/testing/src/contracts/agents-commands.contract.spec.ts
+  pnpm nx test testing -- agents-commands.contract.spec.ts
   pnpm nx show project api | Out-Null
   if ($LASTEXITCODE -ne 0) { throw 'Documented API project is not executable' }
   ```

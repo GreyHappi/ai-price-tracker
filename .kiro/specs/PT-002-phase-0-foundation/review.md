@@ -169,6 +169,12 @@ Verified against current upstream documentation.
 - **Q-13** `design.md` ships full implementation bodies (schema, env module, two workflow YAMLs,
   controller, ping functions, compose file) against the planner prompt's explicit "No code
   bodies" — and the pasted code does not compile.
+  **Partially superseded (2026-08-24, owner decision → D-21 amendment):** the "No code bodies"
+  clause this finding leaned on was an unratified line in `docs/prompts/planner-spec.md`, not a
+  locked decision, and Kiro's documented format is now the structural reference. The finding's
+  first half is withdrawn; its second half stands and is the reason the replacement rule is
+  precision-scoped rather than absent — unverified code that does not compile (T-01…T-03, T-14)
+  still does not belong in a design file.
 - **Q-14** The Module Boundaries section declares constraints for 3 of 8 packages. `contracts`,
   `ai`, `i18n`, `notifications` and `testing` have no declared allowed-dependency set, so Task 4
   cannot be implemented as written — and the one boundary CONTEXT explicitly demands (backend must
@@ -291,9 +297,9 @@ surprises. The first six are worth resolving before or during the tasks that tou
 
 | id | Item | Why it matters |
 |---|---|---|
-| IC-02 | 21 of 33 verify blocks call `pnpm exec vitest run <path>` from the repo root, but no task creates a root Vitest `projects` config. T22 proves the failure: one invocation mixes a jsdom `.tsx` spec with a node `.ts` spec, which a single Vitest project cannot satisfy | Cheapest fix in the list: [planner-spec.md](../../../docs/prompts/planner-spec.md) already prescribes `pnpm nx test <project> -- <filter>`, and `@nx/vitest` infers exactly that per-project target — the correct form needs no config at all |
-| D10 parser | The shared `ConvertFrom-NeonDatabaseUrl` contract enumerates the libpq mapping but omits two behaviours the duplicated runbook blocks actually perform: rejecting sslmode weaker than `require` with mandatory escalation to `verify-full`, and rejecting unknown query parameters. It also marks `PGCHANNELBINDING` required where the runbook treats it as optional | T29 deletes those duplicated blocks. An implementer following D10 literally would silently undo PT-004 — a Done story — and downgrade the nightly `pg_dump` from verified TLS |
-| NEW-01 | R10.2 orders `HEALTHCHECKS_IO_PRIMARY_KEY` into the GitHub Secrets of a repo that is public by D-24, though D9's own table names its only consumer as the home server, which reads a local `.env`. The roadmap asks for "bot token & keystore secrets" and nothing more | Puts the one credential R10.3 exists to isolate into the place R10.3 calls dangerous, for no consumer |
+| IC-02 | **Resolved — see §11.** 21 of 33 verify blocks called `pnpm exec vitest run <path>` from the repo root with no task creating a root Vitest `projects` config | Two parts of the original statement were wrong and are corrected in §11: three Nx test commands existed, not one, and Vitest's per-file `@vitest-environment` docblock means the mixed T22 invocation was fragile, not impossible |
+| D10 parser | **Resolved — see §11.** The shared `ConvertFrom-NeonDatabaseUrl` contract enumerated the libpq mapping but omitted the runbook's TLS rules, and marked `PGCHANNELBINDING` required where the runbook treats it as optional | The regression was prospective, not actual: no parser replacement had been written and higher-precedence canon still requires `verify-full` |
+| NEW-01 | **Refuted, no change made.** R10.2 puts `HEALTHCHECKS_IO_PRIMARY_KEY` in the GitHub Secrets of a repo that is public by D-24, though D9 names its only consumer as the home server, which reads a local `.env` | D-24 says "Secrets in GH Secrets" and thereby permits the location; storing a secret is not supplying it to a workflow, and R10.3/T27 already forbid the backup workflow from referencing it. What remains is a YAGNI question for the owner, not a defect: no canonical Phase-0/1 GitHub-hosted consumer needs that key, so dropping it from R10.2/T27/T28 is defensible and would not weaken D-02 |
 | NEW-03 | No task or gate ever *starts* the local Compose PostgreSQL — it is only ever parsed with `docker compose config --quiet` — yet `api:health-smoke` runs twice in the gate and needs a live database Testcontainers does not supply | A working Compose Postgres is itself a Phase-0 roadmap deliverable |
 | IC-03 | No CI tier actually runs the secret scan: D9 says the `dev` workflow does, R9.1's dev list omits it, and T26 creates `testing:secret-scan` *after* both workflow tasks — so neither workflow could reference it | The Gitleaks gate exists as a local target only |
 | NF-01 / IC-01 | D6 declares a flat `{status, database}` Zod response **and** mandates Terminus, whose `@HealthCheck()` envelope is `{status, info, error, details}`. Both cannot hold, and the checked-in OpenAPI snapshot would document a body the endpoint never returns | Decide at T17/T18: a custom controller returning the flat contract, or adopt the Terminus envelope as the contract |
@@ -308,3 +314,77 @@ surprises. The first six are worth resolving before or during the tasks that tou
 
 These are implementation-time corrections, not spec-blocking defects. Deviations taken while
 resolving them go to `handoff.md` per D-21, never silently into code.
+
+## 11. Round 3 — second opinion and applied corrections (2026-08-25)
+
+The owner requested an independent review of §10's three highest-priority items from GPT 5.6 xhigh
+before any of them was acted on. That review is recorded here with its verdicts, including where it
+corrected this document.
+
+### IC-02 — verification mechanics · REFUTED as stated, fix applied anyway
+
+Two parts of §10's claim were wrong. First, `tasks.md` contained **three** Nx test commands
+(`pnpm nx run-many -t test` at the workspace-harness task and both gate tasks), not one. Second,
+Vitest supports a per-file `@vitest-environment` docblock, so the mixed jsdom/node invocation was
+**fragile, not impossible** — a single project can serve both if each file annotates its
+environment. The absolute claim does not hold.
+
+The underlying defect survives in weaker form: run from the repository root with no root config,
+those 21 commands would miss per-project configuration and fall back to the default environment and
+root-level resolution. Canon prohibits neither remedy, but the Nx form is the better design and was
+applied: R1.3 requires per-project `test` targets, D8 assigns tests to project-specific owners and
+environments, Nx execution exercises caching and project configuration, and Nx does not treat an
+orchestration-only root Vitest config as a project target.
+
+All 21 invocations were rewritten to `pnpm nx test <project> -- <filter>`, the form
+[planner-spec.md](../../../docs/prompts/planner-spec.md) already prescribes. Six of them listed
+files owned by more than one project and were split by owning project — for example T22 now reads:
+
+```powershell
+pnpm nx test web -- phase-zero-shell.spec.tsx
+pnpm nx test testing -- msw-harness.spec.ts
+```
+
+**Carried forward:** the rewrite is sufficient only if T05 actually creates each owning project's
+Vite/Vitest configuration and exposes its `test` target. If R1.3's "explicit target" is meant as
+*manually declared* rather than *Nx-inferred*, R1.3 needs a clarification that this round did not
+make.
+
+### D10 parser contract · CONFIRMED, fix applied
+
+Verified independently against the runbook: it defaults an omitted `sslmode` to `require`
+(line 137), throws on an empty parameter value, throws on any unsupported query parameter
+(fail-closed by design, runbook §3's note), throws on `disable|allow|prefer` as weaker than
+`require` (line 190) and on any unrecognized mode (line 193), then normalizes `require`,
+`verify-ca` and `verify-full` alike to `verify-full` (line 195). `PGCHANNELBINDING` and the other
+optional values are emitted only when supplied (lines 231–234). D10 asserted none of this and
+marked `PGCHANNELBINDING` required.
+
+One correction to §10's framing: **PT-004 was not already lost.** No parser replacement has been
+written, higher-precedence canon still requires `verify-full`, and T29 already says not to change
+unrelated runbook behaviour. The regression was prospective — an implementer taking D10's
+enumeration as the whole contract would have produced it.
+
+Applied: D10 now states the optional/required split and the complete TLS rule set, and T29 requires
+the self-test to cover each rejection and normalization case.
+
+### NEW-01 — primary healthcheck key placement · REFUTED, no change made
+
+D-24 states "Secrets in GH Secrets; keystore/passwords never committed", so canon permits the
+storage location the spec chose. The finding also conflated *storing* a repository secret with
+*supplying* it to a workflow: a GitHub Actions workflow can read a secret only when it explicitly
+references it, and public-repository storage does not publish the value — which is exactly what
+R10.3 and T27 already forbid for the backup workflow.
+
+A narrower question remains and it belongs to the owner, not to this review: no canonical Phase-0 or
+Phase-1 GitHub-hosted consumer reads `HEALTHCHECKS_IO_PRIMARY_KEY`, and the roadmap's Phase-0 bullet
+asks only for the bot token and keystore secrets. If the inventory is trimmed, dropping the key from
+R10.2/T27/T28 is preferable to inventing a hypothetical future GitHub-hosted primary consumer, and
+it would not weaken D-02 — which requires two checks and correct ping behaviour, not a duplicated
+credential. The home-server key stays in its gitignored `.env` either way. **Left as specified
+pending the owner's call.**
+
+### Net effect on §10
+
+`IC-02` and the D10 parser row are resolved. `NEW-01` is refuted and downgraded to a recorded
+owner-facing judgement call. The remaining eleven rows are untouched and still open.

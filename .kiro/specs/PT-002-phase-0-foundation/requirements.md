@@ -143,7 +143,10 @@ that Phase-1 behavior does not need a foundational rename or relationship rewrit
   raw response body.
 - **R4.7** `change_events.observation_id` SHALL be unique. `notification_deliveries` SHALL have a
   unique `dedupe_key`, attempt count, lease, and constrained `pending -> sending -> sent|failed`
-  outbox states that preserve D-05 at-least-once semantics.
+  outbox states that preserve D-05 at-least-once semantics. The documented `dedupe_key` identity
+  SHALL be deterministic from the canonical event, channel, recipient, and future rule ID once
+  rules exist—never a timestamp, attempt counter, or ID minted by a retry; runtime derivation
+  remains with the notification-owning phase.
 - **R4.8** `scrape_runs` SHALL record run kind, nullable entry, adapter, lane, status, start time,
   duration, and error class; it SHALL enforce `entry_id IS NOT NULL OR kind = 'probe'` and SHALL
   store neither raw bodies nor unbounded diagnostic content.

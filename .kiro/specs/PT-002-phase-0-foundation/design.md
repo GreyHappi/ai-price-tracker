@@ -184,7 +184,10 @@ not implement a global URL normalizer.
   checks both tokens plus both expiries at effect time. The actual claim/renew/finalize transaction
   and two-lane concurrency tests belong to Phase 1; schema columns and constraints belong here.
 - Outbox state transitions are `pending -> sending -> sent|failed`. The unique dedupe key prevents
-  duplicate enqueue; it does not claim exactly-once Telegram delivery.
+  duplicate enqueue; it does not claim exactly-once Telegram delivery. Its stable identity inputs
+  are the canonical `change_event_id`, channel, recipient, and future rule ID once Phase-2 rules
+  exist. Timestamp, attempt count, and any retry-minted ID are forbidden inputs. Phase 0 stores and
+  constrains the seam but does not implement enqueue or invent the deferred rule model.
 - Exact constrained sets are only `users.locale = en|tr|ar`, `scrape_runs.lane = primary|backup`,
   and the four outbox statuses. `scrape_runs.kind` must admit reserved `probe`, and
   `observations.extraction_method` must admit reserved `ai`. Source health, target/change kinds,
@@ -442,11 +445,19 @@ PT-003's board instruction is absorbed into the implementation plan through one 
 
 PowerShell signature: `ConvertFrom-NeonDatabaseUrl -DatabaseUrl <string> -> PSCustomObject`.
 
-The returned object exposes the libpq values used by the runbook: required `PGHOST`, `PGPORT`,
-`PGDATABASE`, `PGUSER`, `PGPASSWORD`, `PGSSLMODE`, and `PGCHANNELBINDING`, plus mapped optional
-`PGCONNECT_TIMEOUT`, `PGAPPNAME`, and `PGOPTIONS` when supplied. It validates PostgreSQL schemes and
-Neon direct-host expectations, percent-decodes through URI parsing, and never prints the input or
-password. The runbook setup copies the committed
+The returned object always exposes required `PGHOST`, `PGPORT`, `PGDATABASE`, `PGUSER`,
+`PGPASSWORD`, and `PGSSLMODE`; it exposes `PGCHANNELBINDING`, `PGCONNECT_TIMEOUT`, `PGAPPNAME`, and
+`PGOPTIONS` only when their corresponding query parameters are supplied. It validates PostgreSQL
+schemes and Neon direct-host expectations, percent-decodes through URI parsing, and never prints the
+input or password.
+
+The parser must preserve the runbook's TLS behaviour verbatim, because T29 deletes the only
+executable copies of it and PT-004 is a Done story that depends on it. It defaults an omitted
+`sslmode` to `require`; rejects empty parameter values, unsupported query parameters (fail closed,
+never silently dropped), `sslmode=disable|allow|prefer` as weaker than `require`, and every
+unrecognized `sslmode`; and normalizes `require`, `verify-ca`, and `verify-full` alike to
+`PGSSLMODE=verify-full`, so hostname verification is mandatory. The runbook setup copies the
+committed
 `scripts/windows/parse-neon-url.ps1` from the checked-out repository to
 `C:\ops\ai-price-tracker\parse-neon-url.ps1`, then fails unless that destination is a file. The saved
 backup script and the runbook section 5 audit snippet both dot-source that installed copy; neither
