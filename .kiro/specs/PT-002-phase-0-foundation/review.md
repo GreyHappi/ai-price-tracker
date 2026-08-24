@@ -388,3 +388,26 @@ pending the owner's call.**
 
 `IC-02` and the D10 parser row are resolved. `NEW-01` is refuted and downgraded to a recorded
 owner-facing judgement call. The remaining eleven rows are untouched and still open.
+
+### Concurrent D-21 amendment, and what it supersedes
+
+While this round was applied, the owner amended **D-21** and hardened
+[planner-spec.md](../../../docs/prompts/planner-spec.md) in the same working tree. Two effects on
+this document:
+
+**Q-13 is superseded.** §5 records "`design.md` ships full implementation bodies … against the
+planner prompt's explicit *No code bodies*". That prompt line was accurate when §5 was written, but
+D-21's amendment retires it as "never a ledger decision", replacing the blanket ban with a
+precision-scoped rule: be exact where the design binds — columns, constraints, signatures, wire
+contracts, config keys, pinned versions, the rule a guard enforces — and leave out unverified
+runnable bodies, framework wiring, import lists, and complete config files. Q-13's *surviving* half
+was always the real defect and is unaffected: the round-1 draft's pasted code did not compile
+(T-01…T-03, T-14). The current `design.md` carries interfaces and signatures only, which the amended
+rule explicitly permits, so it is more conformant under the new wording, not less.
+
+**§8's recommendation 2 is discharged.** `planner-spec.md` now requires that a spec touching the
+data model *transcribe* canonical-plan §4 rather than re-derive it, and forbids renaming, adding or
+dropping a table — the exact rule whose absence caused the round-1 schema. It also adds Kiro's
+documented spec structure as the baseline, numbered `<requirement>.<criterion>` acceptance criteria
+so tasks can cite them, and a bar against unsourced numbers ("state a bound only where something
+actually measures it").
