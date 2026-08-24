@@ -24,10 +24,15 @@ development) with Markdown artifacts only — no external tools; (b) develop via
 
 **MVP categories & pilots (D-07, O-06/O-08/O-10).** Seed targets:
 [product/watchlist.md](product/watchlist.md). Sequenced strictly:
-1. Notebook — pilot source picked by the Phase −1 spike between **Vatan** and **ASUS E-Store**.
-2. Used car — arabam.com single-listing URLs.
+1. Notebook — **ASUS E-Store is the Phase −1 spike's preferred pilot candidate** (O-08), subject
+   to the five Phase-1 entry conditions recorded in [roadmap.md](roadmap.md); Vatan remains the
+   alternate candidate.
+2. Used car — arabam.com single-listing URLs (**category retained; source currently
+   unsupported-blocked pending a permitted/authorized first-party route**, O-14).
 3. New-car OEM price lists — **five brands**: Kia TR (Sportage) + Toyota TR (RAV4) first, then
-   VW TR (Tayron), Škoda TR (Kodiaq), BMW TR (X3); PDF-capable.
+   VW TR (Tayron), Škoda TR (Kodiaq), BMW TR (X3); PDF-capable. A temporary priced Toyota Corolla
+   Cross canary from the same `fiyat_v3.xml` feed is included under O-15 and is archived, never
+   deleted, when RAV4 pricing returns.
 
 Category/list-URL tracking, SKU/trim discovery, and dealer-inventory depth form one
 **Phase 4 epic** (O-11, D-29), not MVP.
@@ -59,7 +64,7 @@ product matching never happens (D-13).
                     │ writes/reads                 │ primary-cycle ping
              Neon PostgreSQL (free tier)     healthchecks.io: primary check
                     ▲
-                    │ same DB, same CLI + transactional per-entry lease
+                    │ same DB, same CLI + url-group fence / entry effect leases
              GitHub Actions BACKUP LANE (public repo, 60-min cron):
                after success, ping distinct backup check (including no-op)
                run-due-checks --lane=backup  → skip sources fresh on primary (< 3 h)
@@ -70,9 +75,10 @@ product matching never happens (D-13).
 ```
 
 - **Runtime (D-02, ADR-0002):** home server primary (residential IP = real scraping advantage,
-  $0), GitHub Actions as backup. Freshness is evaluated per adapter/source. PostgreSQL leases
-  (`FOR UPDATE SKIP LOCKED` + expiry) close the simultaneous-start race. Separate primary and
-  backup healthchecks reveal either lane going silent.
+  $0), GitHub Actions as backup. Freshness is evaluated per adapter/source. An expiring
+  `fetch_leases(adapter_key, canonical_url)` row fences each URL group across both lanes; the same
+  fresh token fences every claimed member's effects. Separate healthchecks reveal either lane
+  going silent.
 - **Bot (D-03, ADR-0005):** grammY long-polling; polling XOR webhook — commands are down while the
   primary is down (accepted risk, N-01). 24/7 commands = future *migration* to CF Workers webhook.
 - **Remote access/auth (D-09/D-10):** Tailscale Serve HTTPS is the browser perimeter; the API
@@ -111,39 +117,81 @@ migrations/`pg_dump`; application connections use the separately validated runti
 
 ## 4. Data model (core)
 
-`workspaces` · `users(locale, telegram_chat_id)` · `tracking_targets(workspace_id, kind, title,
-target_price_minor, archived_at)` · `source_entries(target_id, site, url, adapter_key, health,
-next_check_at, lease_owner, lease_until)` ·
-`observations(entry_id, prev_observation_id?, price_minor, currency, in_stock, seller_label?,
-snapshot_hash, extraction_method, confidence, observed_at)` · `change_events(observation_id, kind,
-…)` · `notification_deliveries(recipient_id, dedupe_key, channel,
-status, lease_until, attempts, sent_at)` · `scrape_runs(entry_id, adapter_key, lane, status,
-started_at, duration, error_class)` · `ai_calls(provider,
-model, purpose, tokens, cost, latency, ok)` · `app_settings(ai_routes …)` ·
-`discovery_requests/candidates` (AI add flow).
+`workspaces` · `users(locale, telegram_chat_id)` ·
+  `tracking_targets(workspace_id, kind, title, target_price_minor, archived_at)` ·
+  `source_entries(target_id, site, url, selector?, adapter_key, health, last_checked_at,
+  next_check_at, lease_owner, lease_until)` ·
+  `fetch_leases(adapter_key, canonical_url, lease_owner, lease_until)` with primary key
+  (`adapter_key`, `canonical_url`) ·
+  `observations(entry_id, prev_observation_id?, price_minor, list_price_minor?, currency, in_stock?,
+  seller_label?, snapshot_hash, extraction_method, confidence, observed_at)` ·
+  `change_events(observation_id, kind, …)` ·
+  `notification_deliveries(recipient_id, dedupe_key, channel, status, lease_until, attempts,
+  sent_at)` ·
+  `scrape_runs(entry_id?, kind, adapter_key, lane, status, started_at, duration, error_class)` —
+  `kind` separates ordinary checks from `probe` runs; `entry_id` is null **only** for `probe`-kind
+  rows, enforced as `CHECK (entry_id IS NOT NULL OR kind = 'probe')` (the arabam reopen probe,
+  O-14) ·
+  `ai_calls(provider, model, purpose, tokens, cost, latency, ok)` · `app_settings(ai_routes …)` ·
+  `discovery_requests/candidates` (AI add flow).
 
 **Invariants (full list in [CONTEXT.md](CONTEXT.md)):**
 - Money = **bigint minor units (kuruş) + ISO-4217 currency**; API serializes as string; float never (D-11).
 - Time = UTC `timestamptz` everywhere; localize at presentation.
 - `workspace_id` on **aggregate roots only** (D-10); single seed workspace in MVP.
+- Source-entry identity is (`url`, `selector`) scoped per target: URL alone is not unique within a
+  target because multiple ASUS entries can share the catalogue endpoint (O-19). Null selectors must
+  not be treated as distinct; use `UNIQUE NULLS NOT DISTINCT` or an equivalent partial index. The
+  Phase-0 schema pins the mechanism and must not add a `UNIQUE(url)` constraint. O-19's premise is
+  fetch coalescing by (`adapter_key`, canonical `url`): the worker atomically acquires that key's
+  `fetch_leases` row, then writes the same fresh fencing token to every currently due member entry.
+  The live group fence also blocks a second fetch for a member that becomes due or is added during
+  the first fetch; entry-lock ordering alone is insufficient and is not an allowed substitute.
+  One response serves all claimed selectors. The walking-skeleton spec pins this transaction and
+  its two-entry/two-lane concurrency test is a Phase-1 gate item. `canonical_url` is emitted by the
+  adapter and persisted as `source_entries.url` during preview/approval; the shared layer never
+  guesses which query parts are disposable.
 - `observations` written **only on semantic change** (`snapshot_hash`); otherwise update
   `last_checked_at`. Every attempt goes to `scrape_runs` (D-12).
-- `snapshot_hash` covers (`price_minor`, `currency`, `in_stock`) only. Raw `seller_label` remains
-  display/audit text until stable Seller identity exists; label-only edits are not semantic events.
+- `snapshot_hash` always covers exactly (`price_minor`, `list_price_minor`, `currency`, `in_stock`)
+  for every source, with `list_price_minor` null outside OEM dual-price sources and `in_stock`
+  tri-state (`true`/`false`/`null`). For OEM dual-price observations, `price_minor` is the
+  effective advertised price (campaign when published, otherwise list), and `list_price_minor`
+  preserves the list price. Null `in_stock` means the source publishes no availability and
+  participates in `snapshot_hash` as its own state. This explicit field is an input to the future
+  OEM-adapter spec: it detects campaign start/end and list-price changes while target rules stay on
+  the payable price. Raw `seller_label` remains display/audit text until stable Seller identity
+  exists; label-only edits are not semantic events.
 - Replay keys are concrete: observations form a per-entry `prev_observation_id` chain enforced by
   `UNIQUE NULLS NOT DISTINCT (entry_id, prev_observation_id)`, one canonical `change_event` per
   accepted observation, and a deterministic `dedupe_key` derived from the upserted event plus
   (`channel`, `recipient`, later rule id) (D-05/D-26).
-- Due entries are atomically claimed with a renewable/expiring DB lease; `lease_until` outlives the
-  adapter's scrape timeout. `lease_owner` is a fresh per-claim UUID/fencing token, and the effect
-  transaction re-validates that exact token plus expiry, aborting as a no-op if either changed; all
-  due/freshness checks use DB `now()` (D-02/D-26).
+- Due work is claimed with a renewable/expiring url-group fence plus entry effect leases;
+  `lease_until` covers the full protected operation (including backup upload/finalize), or is
+  renewed throughout it. One fresh UUID is written to the claimed
+  `fetch_leases` row and every due group member, and the effect transaction re-validates both token
+  scopes plus expiry, aborting as a no-op if either changed; all checks use DB `now()` (D-02/D-26).
 - Change detection and swing guards compare against the last **accepted** observation; suspicious or
   AI-quarantined values never become the baseline and never alert unconfirmed (D-06/D-26).
 - Notifications: at-least-once outbox (`pending → sending lease → sent/failed`) + unique
   `dedupe_key`. A narrow post-send/pre-commit duplicate window is accepted for MVP (D-05).
-- Failure diagnostics: sanitized + size-capped; local or Actions artifact with explicit 7-day
-  retention; unsanitized full HTML is forbidden and diagnostics are **never in Neon** (D-12).
+- Failure diagnostics: sanitized + size-capped; local `diagnostics/failures/` files or diagnostic
+  Actions artifacts with explicit 7-day retention; unsanitized full HTML is forbidden and
+  diagnostics are **never in Neon** (D-12). The initial accepted baseline, every accepted change,
+  and every suspicious/held candidate get a sanitized, size-capped local snapshot. Primary first
+  atomically installs it as `pending`, commits effects only after that succeeds, then reconciles its
+  state before a healthy ping. All snapshots survive 35 days; rotation then keeps the two newest
+  `accepted` baseline snapshots and every unresolved `held`/`pending` snapshot, so held attempts
+  cannot evict the before/after chain. The extracted region is never truncated. Each accepted/held
+  backup candidate contributes one envelope to its workflow execution's single 30-day artifact.
+  Batch `prepare → upload → finalize` has no semantic effects before upload; afterward finalize
+  independently revalidates both lease scopes for each candidate. A zero-envelope no-op skips upload.
+  Failures log and retry affected work from a fresh fetch, so no backup alert lacks evidence.
+  Before reporting a healthy cycle, the primary's authenticated/idempotent ingester verifies the
+  exact workflow, API digest, archive shape, and envelope identifiers/hash, resolves the terminal
+  run states, then atomically places every unseen envelope in the local store. Failures retry and
+  suppress that health ping. This preserves both lanes' chain when primary returns within 30 days;
+  a longer outage is accepted as capable of losing already-expired evidence (D-12).
 - PostgreSQL `CHECK` constraints (price > 0, valid enums) back Zod + sanity guards as the final
   defense layer; `change_events.kind` is extensible — NEW_SKU / NEW_TRIM / NEW_SELLER values
   arrive with their Phase-4 features (D-29).
@@ -166,8 +214,8 @@ embedded state (`__NEXT_DATA__`) → **3)** site adapter + Cheerio → **4)** PD
 - Intervals (O-13): 60-min default + jitter; per-source bases (e.g. OEM daily) complement
   per-target overrides. A proven cheap rung 0–2 path may use a 10–15 min minimum only when
   source terms/published limits and adapter rate policy allow; Cheerio/PDF/browser stays ≥60 min.
-- **Sanity guards:** price ≤ 0 or >70% swing → flag suspicious, hold the alert, ask the human.
-  Wrong price is worse than silence.
+- **Sanity guards:** price ≤ 0 or >70% swing on either price field, or a campaign-presence flip
+  (D-12) → flag suspicious, hold the alert, ask the human. Wrong price is worse than silence.
 - **AI extraction is quarantined:** last-resort AI-extracted values carry
   `extraction_method='ai'` + confidence, never fire alerts without human confirmation; main job is
   drafting parser repairs (human-approved).
@@ -193,7 +241,11 @@ embedded state (`__NEXT_DATA__`) → **3)** site adapter + Cheerio → **4)** PD
 - Build a small **eval set (20–50 real samples)** before locking the chain order.
 - Product adding: **Path A** direct URL → adapter → preview → approve. **Path B** free text → AI
   normalize → multi-source search → ranked candidates (Telegram inline keyboard / dashboard
-  modal) → user picks → Path A preview. **AI proposes, human approves — always.**
+  modal) → user picks → Path A preview. **AI proposes, human approves — always.** The preview shows
+  the raw source string beside the parsed minor-unit value, and when the workspace already holds a
+  source entry with the same (`url`, `selector`) it says so and requires explicit confirmation
+  before a second tracking target is created for it — duplicate targets fire duplicate alerts that
+  the per-target cooldown cannot suppress.
 
 ## 7. API & clients
 
@@ -258,10 +310,10 @@ Phase-based and **date-free** (O-05). Full detail: [roadmap.md](roadmap.md).
 
 | Phase | Goal (one line) |
 |---|---|
-| **-1 Spike** | 1–2 days, timeboxed: probe Vatan, ASUS, arabam, and all 5 OEM endpoints against the watchlist — before foundation |
+| **-1 Spike** | 1–2 days, timeboxed: probe Vatan, ASUS, arabam, and all 5 OEM endpoints using watchlist targets where carried; use an off-watchlist Vatan control — before foundation |
 | **0 Foundation** | Nx workspace, Docker PG, Drizzle schema v1, two-tier CI, docs seeds, 7 ADRs |
 | **1 Walking skeleton** | one URL → extract → PG → change → Telegram; concurrent-lane lease + both healthchecks live |
-| **2 MVP build-out** | arabam + 5 OEM adapters, rules+dedupe, dashboard (+comparison, WS ping), AI discovery, i18n EN/TR/AR, PWA over Tailscale |
+| **2 MVP build-out** | 5 OEM adapters (arabam blocked, O-14), rules+dedupe, dashboard (+comparison, WS ping), AI discovery, i18n EN/TR/AR, PWA over Tailscale |
 | **3 Native** | Tauri desktop → Android signed APK → iOS build/simulator (CI macOS, public repo) |
 | **4 Post-MVP / hardening** | category/list tracking + SKU/trim discovery + dealer inventory + analytics; sahibinden spike only after all budget/stability/access-review gates; Crawlee if needed |
 | **5 SaaS-readiness** | real auth/pairing, quotas, Astro landing, billing, KVKK/GDPR |

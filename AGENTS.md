@@ -6,12 +6,12 @@
 
 ## What this project is
 
-**AI Price Tracker** — tracks prices/stock of products on Turkish sites (notebooks, used cars on
-arabam.com, new-car OEM price lists — five brands: Kia Sportage, Toyota RAV4, VW Tayron,
-Škoda Kodiaq, BMW X3; seed targets in `docs/product/watchlist.md`), detects semantic changes, and
-notifies via Telegram; dashboard as web SPA + PWA, later Tauri desktop/Android/iOS. Solo project,
-$0 infrastructure target (AI API terms must be verified under O-03), built through AI seasons
-with a heavy emphasis on process artifacts.
+**AI Price Tracker** — tracks prices and stock of products on Turkish sites (notebooks; used cars
+on arabam.com, currently unsupported-blocked per O-14; and new-car OEM price lists for five brands:
+Kia Sportage, Toyota RAV4, VW Tayron, Škoda Kodiaq, BMW X3). It detects semantic changes and
+notifies via Telegram; the dashboard is a web SPA + PWA, later Tauri desktop/Android/iOS. Seed
+targets live in `docs/product/watchlist.md`. Solo project, $0 infrastructure target (AI API terms
+must be verified under O-03), built through AI seasons with a heavy emphasis on process artifacts.
 
 ## Read first, in this order
 

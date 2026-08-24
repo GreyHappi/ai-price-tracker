@@ -15,13 +15,17 @@ Free PaaS options are effectively gone (Railway $1/mo credit, Render cold starts
 2. **Backup lane:** the same worker CLI on a 60-min Actions cron with `SCRAPE_LANE=backup`.
    It evaluates latest successful primary freshness **per adapter/source**, skips fresh sources
    (<3 h), and submits only stale/due work. A global "last primary run" is insufficient.
-3. **Concurrency control:** both lanes atomically claim each due `source_entry` using an expiring
-   PostgreSQL lease (`FOR UPDATE SKIP LOCKED` + `lease_owner`/`lease_until`). `lease_owner` is a
-   fresh UUID per claim (a fencing token), never a stable process or lane id. The effect transaction
-   must match that token and an unexpired lease; unique observation/event/delivery keys make crash
-   retries replay-safe. DB timestamps alone are not concurrency control.
-4. **Dead-man switches:** separate healthchecks.io checks. Primary pings after a successful
-   cycle. Actions pings its own check after successful completion, including a correct no-op.
+3. **Concurrency control:** the fetch claim is a (`adapter_key`, canonical `url`) group, not an
+   entry. Both lanes contend on one expiring `fetch_leases` row for that key; the winning transaction
+   writes one fresh UUID fencing token to the group and every currently due member entry. The group
+   lease remains live through fetch and any evidence upload/finalize, so another member becoming due
+   or being added cannot let the other lane fetch the same url concurrently. Effect transactions
+   match the unexpired token on both group and entry; unique observation/event/delivery keys make
+   crash retries replay-safe. Entry-lock ordering alone is not the url fence. DB timestamps alone
+   are not concurrency control.
+4. **Dead-man switches:** separate healthchecks.io checks. Primary cycle success includes the
+   required backup-snapshot ingest; an ingest failure suppresses its ping even if scraping may
+   continue. Actions pings its own check after successful completion, including a correct no-op.
    Thus a disabled or failing Actions schedule is visible independently of primary health.
 5. **Single scheduling surface:** one replay-safe `run-due-checks` command
    (claim → scrape → compare → persist → enqueue notification), called by the home scheduler,
@@ -33,7 +37,7 @@ Actions as primary scheduler (lamport/grove/plan-2) · Railway/Render/Fly · a C
 
 ## Consequences
 (+) $0; residential IP for the hard sites; observable backup readiness; concurrent lane starts
-cannot own the same source entry. (−) Bot commands are offline while primary is down (accepted
+cannot own the same fetch group. (−) Bot commands are offline while primary is down (accepted
 risk); the backup lane uses datacenter IPs and can cover only easy sources; expired leases and
 at-least-once effects require explicit tests.
 

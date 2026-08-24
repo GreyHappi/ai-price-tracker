@@ -22,8 +22,11 @@ coverage/
 .nx/workspace-data
 
 # Backups, dumps & diagnostics (never committed — see D-12, N-15)
-backups/
-diagnostics/
+# Anchored to the repo root on purpose: these are ops-root directories, and an unanchored pattern
+# would also swallow future committed fixtures such as packages/*/fixtures/snapshots/.
+/backups/
+/diagnostics/
+/snapshots/
 *.dump
 *.sql.gz
 *.log
