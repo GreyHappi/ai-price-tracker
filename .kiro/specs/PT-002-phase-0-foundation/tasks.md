@@ -60,7 +60,10 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   ```powershell
   $projects = @(pnpm nx show projects)
   foreach ($name in @('api','worker','web')) { if ($name -notin $projects) { throw "Missing $name" } }
-  $jestFiles = @(rg --files apps | Where-Object { $_ -match '(^|[\\/])(jest\.config|.*\.jest\.config)|\.spec\.jest\.' })
+  $jestFiles = @(Get-ChildItem -LiteralPath . -Recurse -File | Where-Object {
+    $_.FullName -notmatch '[\\/](\.git|node_modules)[\\/]' -and
+    $_.Name -match '(^jest\.config\.|\.jest\.config\.|\.spec\.jest\.)'
+  })
   if ($jestFiles.Count -ne 0) { throw "Unexpected Jest artifact: $($jestFiles -join ', ')" }
   pnpm nx run-many -t lint,typecheck,build --projects=api,worker,web
   ```
@@ -82,8 +85,10 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 - [ ] **T05 — Install and wire the Phase-0 test harness.** Configure Vitest targets for frontend,
   backend, and libraries; install PostgreSQL Testcontainers, targeted `fast-check`, React Testing
   Library, MSW, and Playwright dependencies without Jest; and add a workspace contract test that
-  asserts the exact project set, explicit targets, version pins, and absence of Jest runner/config
-  artifacts. Do not add a repository-wide coverage threshold. **Refs:** R1.3–R1.4, R8.1–R8.5;
+  asserts the exact project set, version pins, and absence of Jest artifacts. For every required
+  target, assert the stable target name and runnable configuration reported by `nx show project`;
+  inferred and manually declared targets are both valid under that same proof. Do not add a
+  repository-wide coverage threshold. **Refs:** R1.3–R1.4, R8.1–R8.5;
   D3, D8.
 
   **Verify:**
@@ -139,13 +144,16 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   PostgreSQL only to `127.0.0.1`, and omit both a top-level Compose `version` and tracked password
   literals in the Compose file. Mark every tracked example credential unmistakably dummy/local and
   reject production/Neon-looking secrets. Add a contract test for image major, bind, interpolation,
-  and forbidden keys. **Refs:** R3.5–R3.6; D5, D8.
+  and forbidden keys. Add `testing:compose-smoke` to start the `postgres` service with
+  `.env.example`, wait for readiness, execute `SELECT 1`, and tear down volumes from a `finally`
+  path even when an assertion fails. **Refs:** R3.5–R3.6; D3, D5, D8.
 
   **Verify:**
 
   ```powershell
   docker compose --env-file .env.example config --quiet
   pnpm nx test testing -- compose.contract.spec.ts
+  pnpm nx run testing:compose-smoke
   ```
 
 - [ ] **T10 — Add the pooled Drizzle runtime provider.** Implement `createDatabaseRuntime` in
@@ -254,8 +262,9 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 
 ## API and web shell
 
-- [ ] **T17 — Add the health Zod contract and derived Nest DTO.** Define healthy/unhealthy Zod 4
-  response schemas in `contracts`, serialize their money-free JSON shape deterministically, pin
+- [ ] **T17 — Add the flat health Zod contract and derived Nest DTOs.** Define the exact
+  `{ status: 'ok', database: 'up' }` and `{ status: 'error', database: 'down' }` Zod 4 response
+  schemas plus their union in `contracts`, serialize their JSON shape deterministically, pin
   `nestjs-zod` 5.5.0, and derive the Nest/OpenAPI DTO metadata from those schemas. Wire its current
   validation/serialization integration and do not create a parallel handwritten interface.
   **Refs:** R6.1, R6.5; D3, D6.
@@ -270,8 +279,9 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 
 - [ ] **T18 — Implement the loopback Drizzle health endpoint.** Configure global prefix `api`, URI
   versioning default `1`, controller path only `health`, and default host `127.0.0.1`. Implement the
-  Terminus custom indicator over the injected Drizzle probe; map database failure to sanitized 503.
-  Do not install TypeORM or hardcode `api/v1` in the controller. **Refs:** R6.2–R6.4; D6.
+  Terminus custom indicator over the injected Drizzle probe, but do not expose Terminus's default
+  `@HealthCheck()` envelope. Map the internal result to T17's exact flat 200/503 DTOs. Do not
+  install TypeORM or hardcode `api/v1` in the controller. **Refs:** R6.2–R6.4; D6.
 
   **Verify:**
 
@@ -282,8 +292,9 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 
 - [ ] **T19 — Add API e2e, health smoke, and OpenAPI snapshot targets.** Configure `api:e2e` with a
   real PostgreSQL 17 Testcontainer and assert exact 200/up plus forced 503/down behavior at
-  `/api/v1/health`. Add non-hanging `api:health-smoke` that starts on loopback, asserts HTTP 200,
-  and always closes. Generate OpenAPI with `SwaggerModule.createDocument`, apply
+  `/api/v1/health`. Add non-hanging `api:health-smoke` that owns a PostgreSQL 17 Testcontainer,
+  starts on loopback, asserts the exact flat HTTP 200 body, and always closes both application and
+  container. Generate OpenAPI with `SwaggerModule.createDocument`, apply
   `cleanupOpenApiDoc`, and add the deterministic checked-in snapshot plus `api:openapi-check`.
   **Refs:** R1.3, R6.4–R6.5, R8.2, R12.2; D3, D6, D8.
 
@@ -339,17 +350,21 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
 - [ ] **T23 — Add and invoke real-browser LTR/RTL Playwright coverage.** Configure the actual
   `web:e2e` target and test the empty shell at committed desktop and mobile viewports in LTR and
   forced RTL. Assert the catalog text is visible, logical alignment flips, and no element overlaps
-  or causes horizontal overflow. **Refs:** R1.3, R7.3, R7.5, R8.3, R12.3; D3, D7, D8.
+  or causes horizontal overflow. Install the pinned Chromium browser before invoking the target;
+  package installation alone is not browser provisioning. **Refs:** R1.3, R7.3, R7.5, R8.3,
+  R12.3; D3, D7, D8.
 
   **Verify:**
 
   ```powershell
+  pnpm exec playwright install chromium
   pnpm nx run web:e2e -- --grep "Phase 0 shell"
   ```
 
 ## CI, security, and external provisioning
 
-- [ ] **T24 — Implement the `dev` CI tier.** On pushes to `dev` and manual dispatch, use
+- [ ] **T24 — Implement the `dev` CI tier.** Create `.github/workflows/dev-checks.yml`; on pushes
+  to `dev` and manual dispatch, use
   immutable-SHA-pinned `actions/checkout@v7` plus `pnpm/setup@v2`. Configure the setup action with
   `runtime: node@24` and `install: false`, then execute exactly one explicit
   `pnpm install --frozen-lockfile` before workspace lint/typecheck/test, including database
@@ -364,9 +379,12 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   pnpm nx test testing -- dev-workflow.contract.spec.ts
   ```
 
-- [ ] **T25 — Implement the `main` phase-gate CI tier.** On pushes/merges to `main` and manual
-  dispatch, run the complete dev tier plus `api:e2e`, `web:e2e`, `api:openapi-check`,
-  `db:migration-check`, and the `api`/`worker`/`web` production builds. Reuse T24's exact
+- [ ] **T25 — Implement the `main` phase-gate CI tier.** Create
+  `.github/workflows/main-gate.yml`; on pushes/merges to `main` and manual dispatch, run the
+  complete dev tier plus `testing:compose-smoke`, `api:e2e`, `web:e2e`, `api:openapi-check`,
+  `db:migration-check`, and the `api`/`worker`/`web` production
+  builds. Provision ephemeral PostgreSQL 17 runtime/direct URLs for targets that validate them and
+  install Chromium with Playwright's Linux dependencies before `web:e2e`. Reuse T24's exact
   `pnpm/setup` inputs, single frozen install, immutable pins, and `permissions: contents: read`;
   publishing/signing/packaging/release targets are absent. The workflow must invoke only the real
   targets created earlier. **Refs:** R9.2–R9.3, R9.6; D3, D9.
@@ -381,7 +399,9 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   executable CI/local target and run current `gitleaks git` plus `gitleaks dir` with redacted
   output. Add a recognized dummy-secret fixture proving the scanner fails, then allow only that
   explicit test fixture. Do not use deprecated `detect`, grep-only scanning, or a nonasserting
-  “report” step. **Refs:** R9.4–R9.5; D3, D8, D9.
+  “report” step. Amend both `dev-checks.yml` and `main-gate.yml` to invoke the executable scan, and
+  extend both workflow contract tests to fail when that invocation is absent. **Refs:** R9.1–R9.5;
+  D3, D8, D9.
 
   **Verify:**
 
@@ -405,11 +425,13 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   ```
 
 - [ ] **T28 — Provision and verify owner-controlled external settings.** This task is external and
-  must not place values or full ping URLs in the repository. Verify two distinct existing
-  healthchecks.io checks have the roles “primary cycle” and “backup workflow including valid
-  no-op”; retain their owner-selected names/cadence/grace without renaming them after
-  `AIPT-primary-up`/`AIPT-neon-backup`. Add all seven secret names to GitHub, keep the primary key
-  outside the public backup workflow, and enable GitHub secret scanning plus push protection.
+  must not place values or full ping URLs in the repository. Ensure two distinct healthchecks.io
+  checks exist with the roles “primary cycle” and “backup workflow including valid no-op”: reuse
+  and record a correctly configured existing check or create a missing one. Retain owner-selected
+  names/cadence/grace without renaming checks after `AIPT-primary-up`/`AIPT-neon-backup`; if those
+  values are unavailable, leave owner evidence incomplete instead of guessing. Add all seven
+  secret names to GitHub, keep the primary key outside the public backup workflow, and enable
+  GitHub secret scanning plus push protection.
   O-20 remains open and no third check is provisioned by this task. **Refs:** R9.5, R10.1–R10.5;
   D9, D11.
 
@@ -451,13 +473,16 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   otherwise regresses PT-004's verified-TLS guarantee. The self-test must cover each of those
   rejection and normalization cases, and must statically assert the
   setup copy, existence guard, and both dot-source callers. This closes PT-003's board instruction
-  without changing unrelated runbook behavior. **Refs:** R11.2–R11.3; D10.
+  without changing unrelated runbook behavior. Expose the self-test through
+  `testing:neon-parser-check`, selecting `powershell.exe` on Windows and `pwsh` elsewhere while
+  retaining Windows PowerShell compatibility. Amend `main-gate.yml` to invoke the new target and
+  extend its workflow contract test only after the target exists. **Refs:** R9.2, R11.2–R11.3;
+  D3, D8–D10.
 
   **Verify:**
 
   ```powershell
-  powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\windows\parse-neon-url.tests.ps1
-  if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+  pnpm nx run testing:neon-parser-check
   ```
 
   **Owner-controlled external verify — installed Windows host:**
@@ -479,6 +504,8 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   pnpm nx run db:migration-check
   pnpm nx run api:health-smoke
   pnpm nx run testing:secret-scan
+  pnpm nx run testing:compose-smoke
+  pnpm nx run testing:neon-parser-check
   ```
 
 - [ ] **T31 — Seed Kiro steering as a source index.** Create concise steering files that link to and
@@ -527,6 +554,8 @@ product UI, complete TR/AR catalogs, or an O-20 resolution while executing this 
   pnpm nx run db:migration-check
   pnpm nx run api:health-smoke
   pnpm nx run testing:secret-scan
+  pnpm nx run testing:compose-smoke
+  pnpm nx run testing:neon-parser-check
   ```
 
   **Owner-controlled external verify — CI:**

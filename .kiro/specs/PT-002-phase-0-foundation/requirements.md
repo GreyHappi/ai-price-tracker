@@ -18,8 +18,9 @@ Binding sources for this foundation are grouped as follows:
 - the direct-Neon, correctness, and audit-follow-up amendments N-15, N-17, and N-18, plus the
   schema-bearing outcomes O-14, O-18, and O-19.
 
-O-20 remains open and binding as an unresolved owner decision. If this document and a canonical
-source appear to conflict, the canonical source wins.
+O-20 remains open and binding as an unresolved owner decision for Phase 1's backup-evidence path;
+it does not block T01 or Phase 0. If this document and a canonical source appear to conflict, the
+canonical source wins.
 
 ## 2. Ubiquitous language
 
@@ -32,7 +33,7 @@ source appear to conflict, the canonical source wins.
 - **Entry lease** — the effect fence stored on a source entry.
 - **Snapshot** — a semantic observation; the canonical hash tuple is
   `(price_minor, list_price_minor, currency, in_stock)`.
-- **Primary check** — the existing healthchecks.io dead-man check for successful primary cycles,
+- **Primary check** — the owner-controlled healthchecks.io dead-man check for successful primary cycles,
   including required backup-snapshot ingestion.
 - **Backup check** — the independent healthchecks.io dead-man check for successful backup-workflow
   completion, including a valid no-op.
@@ -56,9 +57,12 @@ results do not depend on ambient package-manager or generator defaults.
 - **R1.2** WHEN Nx discovers the workspace, THE FOUNDATION SHALL expose exactly the Phase-0 project
   names `api`, `worker`, `web`, `contracts`, `domain`, `db`, `scraping`, `ai`, `i18n`,
   `notifications`, and `testing`; no `native` or speculative application SHALL be scaffolded.
-- **R1.3** THE FOUNDATION SHALL provide explicit `lint`, `typecheck`, `test`, and `build` targets
-  wherever applicable, plus executable `api:e2e`, `web:e2e`, `api:openapi-check`, and database
-  migration-drift targets used by the relevant gates.
+- **R1.3** THE FOUNDATION SHALL expose named, directly executable Nx `lint`, `typecheck`, `test`,
+  and `build` targets wherever applicable, plus executable `api:e2e`, `web:e2e`,
+  `api:openapi-check`, and database migration-drift targets used by the relevant gates. A target
+  MAY be Nx-inferred or manually declared, but `nx show project` and the workspace contract test
+  SHALL prove the same required name, executor/configuration, and runnable behavior; a package
+  script that Nx cannot invoke SHALL NOT satisfy this criterion.
 - **R1.4** WHEN generators are used, THE FOUNDATION SHALL explicitly select Vite/Vitest or no
   generated test runner as appropriate and SHALL contain no Jest configuration, dependency, or
   generated Jest test.
@@ -107,7 +111,8 @@ so that an invalid Neon URL fails safely before database work starts.
   port only to `127.0.0.1`, omit the obsolete top-level Compose `version`, and obtain credentials
   from a gitignored `.env` without a credential literal in tracked Compose. A tracked
   `.env.example` MAY contain only unmistakably dummy local values; it SHALL contain no production
-  or Neon secret.
+  or Neon secret. An automated smoke target SHALL start the service with those dummy values, wait
+  for readiness, execute a real `SELECT 1`, and always tear the stack down.
 - **R3.6** THE FOUNDATION SHALL commit only safe example values and variable names; real secrets,
   production URLs, and credentials SHALL remain absent from tracked files and generated output.
 
@@ -194,7 +199,7 @@ response proves the API can query PostgreSQL.
 
 #### Acceptance criteria
 
-- **R6.1** THE canonical request/response Zod 4 schemas SHALL live in `contracts`; the API SHALL
+- **R6.1** THE canonical healthy and unhealthy response Zod 4 schemas SHALL live in `contracts`; the API SHALL
   use the locked `nestjs-zod` integration, and Nest DTO/OpenAPI metadata SHALL be derived from
   those schemas rather than maintained as parallel handwritten types.
 - **R6.2** THE API SHALL set global prefix `api`, enable URI versioning with default version `1`, and
@@ -202,8 +207,10 @@ response proves the API can query PostgreSQL.
   `api/v1` duplicate.
 - **R6.3** THE API SHALL listen on `127.0.0.1` by default.
 - **R6.4** WHEN the Drizzle provider can execute a minimal database probe, GET `/api/v1/health`
-  SHALL return HTTP 200 and the shared healthy response shape; IF PostgreSQL is unavailable, it
-  SHALL return HTTP 503 and the shared unhealthy response shape without exposing credentials.
+  SHALL return HTTP 200 with exactly `{ "status": "ok", "database": "up" }`; IF PostgreSQL is
+  unavailable, it SHALL return HTTP 503 with exactly
+  `{ "status": "error", "database": "down" }` without exposing credentials. Terminus MAY own
+  the internal health indicator but its default envelope SHALL NOT become the public wire shape.
 - **R6.5** THE checked-in OpenAPI snapshot SHALL be produced from the running Nest application and
   shared Zod DTOs, passed through `nestjs-zod`'s required `cleanupOpenApiDoc`, and CI SHALL fail on
   an uncommitted contract delta.
@@ -221,8 +228,8 @@ so that later UI work does not retrofit them.
 - **R7.2** React binding and direction synchronization SHALL live under `web`, and changing the
   active direction SHALL set document `lang` and `dir` consistently.
 - **R7.3** THE Phase-0 shell SHALL render the checked-in English catalog in normal LTR and forced RTL
-  modes. Complete Turkish and Arabic catalogs SHALL remain a Phase-2 deliverable under the explicit
-  D-23 exception.
+  modes. The Phase-0 roadmap gate explicitly requires only that English shell; complete Turkish
+  and Arabic catalogs SHALL remain a Phase-2 deliverable under D-23's binding EN/TR/AR commitment.
 - **R7.4** Flat ESLint SHALL enable an installed, real hardcoded-user-string rule compatible with
   the configuration (`eslint-plugin-i18next` / `i18next/no-literal-string`) in officially supported
   `mode: 'jsx-only'`, with only narrow structural JSX-attribute exclusions. It SHALL fail controlled
@@ -243,7 +250,8 @@ tests mean more than mocked success.
   instance and SHALL NOT replace migration, constraint, or health-probe behavior with an in-memory
   database.
 - **R8.3** Web component tests SHALL use React Testing Library and MSW for HTTP boundaries, while
-  layout and RTL geometry SHALL run through the invoked `web:e2e` Playwright target.
+  layout and RTL geometry SHALL run through the invoked `web:e2e` Playwright target. Local and CI
+  setup SHALL install the pinned Chromium browser binary before that target runs.
 - **R8.4** `fast-check` SHALL be limited to high-value invariants such as URL classification and
   money/currency validation; THE FOUNDATION SHALL NOT impose a repo-wide property or coverage gate.
 - **R8.5** Coverage thresholds SHALL be introduced only for high-value pure domain/parser logic
@@ -257,11 +265,14 @@ receives phase-gate scrutiny.
 #### Acceptance criteria
 
 - **R9.1** ON a push to `dev`, CI SHALL install from the frozen lockfile and run lint, explicit
-  typecheck, unit tests, and integration tests, including the Testcontainers database suite.
-- **R9.2** ON a push or merge to `main`, CI SHALL run the dev-tier checks plus invoked API/web e2e,
-  OpenAPI snapshot, migration-drift, and `api`/`worker`/`web` production builds. Publishing,
-  signing, packaging, and release targets SHALL remain deferred; no elapsed-time SLO SHALL be
-  invented for either tier.
+  typecheck, unit tests, integration tests including the Testcontainers database suite, and the
+  pinned Gitleaks history/working-tree scan.
+- **R9.2** ON a push or merge to `main`, CI SHALL run the dev-tier checks plus the Compose smoke,
+  Neon parser self-test, invoked API/web e2e, OpenAPI snapshot, migration-drift, and
+  `api`/`worker`/`web` production builds. CI SHALL provision ephemeral PostgreSQL 17 connection
+  values for checks that require `DATABASE_URL` or `DATABASE_DIRECT_URL`, and SHALL install the
+  pinned Chromium binary before `web:e2e`. Publishing, signing, packaging, and release targets
+  SHALL remain deferred; no elapsed-time SLO SHALL be invented for either tier.
 - **R9.3** GitHub workflow actions SHALL be current supported releases, use `pnpm/setup@v2` for
   pnpm 11/Node 24 provisioning, and be pinned to immutable full commit SHAs with the release tag
   recorded in a comment. Its inputs SHALL pin `runtime: node@24` and `install: false`, followed by
@@ -283,10 +294,12 @@ ready before cycles exist so that Phase 1 can wire runtime pings without conflat
 
 #### Acceptance criteria
 
-- **R10.1** THE Phase-0 provisioning record SHALL identify two distinct existing healthchecks.io
-  checks: one primary-cycle check and one backup-workflow check. It SHALL NOT rename either check
-  after Windows Scheduled Tasks such as `AIPT-primary-up` or `AIPT-neon-backup`, and it SHALL NOT
-  invent cadence or grace values absent from owner configuration.
+- **R10.1** THE owner-controlled Phase-0 provisioning task SHALL ensure that two distinct
+  healthchecks.io checks exist: one primary-cycle check and one backup-workflow check. It SHALL
+  reuse and identify a correctly configured existing check or create the missing check, without
+  renaming either after Windows Scheduled Tasks such as `AIPT-primary-up` or
+  `AIPT-neon-backup`. It SHALL NOT invent cadence or grace values absent from owner configuration;
+  missing values remain incomplete owner evidence rather than guessed configuration.
 - **R10.2** GitHub Secrets SHALL contain distinct placeholders/credentials for
   `TELEGRAM_BOT_TOKEN`, `HEALTHCHECKS_IO_PRIMARY_KEY`, `HEALTHCHECKS_IO_BACKUP_KEY`, and the future
   Android signing set `ANDROID_KEYSTORE_BASE64`, `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`,
@@ -310,9 +323,12 @@ that commands and Neon URL parsing do not drift between copies.
 - **R11.1** `.kiro/steering/` SHALL be seeded with concise repository guidance that links to
   `CONTEXT.md`, the canonical plan, ledger, active board, and agent contract as sources of truth; it
   SHALL NOT copy arbitrary leading lines or create an independently maintained decision summary.
+  A non-mutating Markdown target SHALL validate the Phase-0-touched Markdown, internal links, and
+  code fences and SHALL run again after closing documentation changes.
 - **R11.2** A shared `parse-neon-url.ps1` SHALL parse and validate the supported Neon PostgreSQL URL
   into the libpq values required by the Windows runbook without printing the original URL or
-  password.
+  password. Its cross-platform Nx self-test target SHALL run in the complete Phase-0 gate while
+  retaining Windows PowerShell compatibility.
 - **R11.3** The runbook's saved backup script and section 5 audit snippet SHALL dot-source that same
   parser; duplicated parsing implementations SHALL be removed. The runbook setup SHALL copy the
   committed parser to `C:\ops\ai-price-tracker\parse-neon-url.ps1` and assert that the installed
@@ -336,10 +352,10 @@ working foundation without pulling later behavior forward.
   SHALL observe HTTP 200; WITH PostgreSQL unavailable, the API e2e suite SHALL observe HTTP 503.
 - **R12.3** Playwright SHALL prove the empty shell renders from the English catalog in LTR and forced
   RTL without horizontal overflow or overlap at the committed Phase-0 viewports.
-- **R12.4** THE phase record SHALL include green dev/main gate evidence, schema/constraint evidence,
-  secret-scan evidence, and owner-controlled evidence for healthcheck provisioning, GitHub secret
-  names/scopes, secret scanning/push protection, board state, and D-19's reconciled fresh-session
-  phase reviews.
+- **R12.4** THE phase record SHALL include green dev/main gate evidence, schema/constraint,
+  Compose readiness/SQL, Neon parser, and secret-scan evidence, plus owner-controlled evidence for
+  healthcheck provisioning, GitHub secret names/scopes, secret scanning/push protection, board
+  state, and D-19's reconciled fresh-session phase reviews.
 - **R12.5** Source adapters, `run-due-checks`, lease-claim algorithms, snapshots and alerts,
   healthcheck ping calls, backup evidence ingestion, full TR/AR catalogs, authentication behavior,
   PWA/native deliverables, and all product UI SHALL remain deferred to their canonical phases.
@@ -359,4 +375,4 @@ working foundation without pulling later behavior forward.
 | R9 | D3, D9 |
 | R10 | D9 |
 | R11 | D10 |
-| R12 | D8, D11 |
+| R12 | D1, D8, D11 |

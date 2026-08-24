@@ -8,7 +8,9 @@ draft:** rejected.
 > exists: it was regenerated in response to this review, and the replacement is what this
 > repository carries. Sections 2–8 describe the rejected draft and are kept because the ledger of
 > what was wrong is why the replacement is trustworthy — not as a description of the committed
-> files. Section 9 records the rewrite, its independent verification, and every item still open.
+> files. Section 9 records the rewrite and its independent verification; §10/§11 preserve the
+> carryover state at those review points. **Section 12 is the current status and closes every §10
+> carryover before implementation.**
 
 ## Verdict
 
@@ -411,3 +413,30 @@ dropping a table — the exact rule whose absence caused the round-1 schema. It 
 documented spec structure as the baseline, numbered `<requirement>.<criterion>` acceptance criteria
 so tasks can cite them, and a bar against unsourced numbers ("state a bound only where something
 actually measures it").
+
+## 12. Pre-implementation reconciliation — all §10 carryovers closed (2026-08-25)
+
+The owner asked that every known item be documented even where it does not block T01. N-19 records
+the binding choices; the requirements, design and tasks now make each choice visible to its
+implementer and verifier. Historical findings above remain unchanged as review evidence.
+
+| §10 item | Final disposition and execution-visible location |
+|---|---|
+| IC-02 / R1.3 | Resolved in §11; R1.3, D3 and T05 now define an explicit target as named, directly executable and proven through Nx. Inferred and manually declared targets are equally valid under that proof. |
+| D10 parser contract | Resolved in §11; D10 and T29 retain the complete fail-closed TLS contract. T29 creates `testing:neon-parser-check`; T30/T33 and the main workflow run it. |
+| NEW-01 | Refuted in §11. R10/D9/T27–T28 make the current seven-secret inventory binding under D-24 while forbidding every workflow from receiving the primary healthcheck key. No hypothetical consumer was invented. |
+| NEW-03 | R3.5, D3/D5/D8 and T09 add a real Compose lifecycle smoke: start the dummy service, wait for readiness, run `SELECT 1`, then tear down in a finally path. T19 separately owns its PostgreSQL 17 Testcontainer lifecycle. |
+| IC-03 | R9, D8/D9 and T26 require both named workflows to invoke the Gitleaks target; contract tests verify the invocations. |
+| NF-01 / IC-01 | R6, D6 and T17–T19 bind exact flat 200/503 Zod response schemas. Terminus may supply internal readiness machinery but its default envelope is not public API. |
+| L5 / L10 | R10, D9 and T28 define idempotent provisioning: reuse and record a correctly configured owner-controlled check, or create a missing one. Cadence/grace is never guessed. |
+| L3 | R8, D8 and T23/T25 install pinned Chromium browser binaries before local and CI Playwright execution. |
+| L7 | R9, D9 and T25 provision ephemeral PostgreSQL 17 URLs for main-gate migration and health work; repository secrets are not used for these checks. |
+| L4 | D9 records OpenAPI snapshot enforcement in the main tier as the accepted D-20 risk-tier choice, rather than an unresolved gap. |
+| IC-04 | D12's R3, R8, R11 and R12 task/verification mappings were corrected to the actual owning tasks. |
+| IC-08 | D9 and T24/T25 pin `.github/workflows/dev-checks.yml` and `.github/workflows/main-gate.yml`. |
+| IC-12 | T03 uses a repository-wide PowerShell scan, including the workspace root and excluding `.git` and dependency trees; it no longer depends on `rg` or scans only `apps/`. |
+| IC-09 / IC-10 / IC-11 / IC-14 / L6 | R12 maps to D1/D8/D11; D6 exposes two canonical schemas plus their union; R11/D10 add the Markdown check target; the parser is a gated Nx target; R7/D7 attribute the Phase-0 EN-first gate to the roadmap while preserving D-23's full Phase-2 obligation. |
+
+**Reconciled verdict:** no §10 item remains open and no listed choice must be invented during
+implementation. PT-002 may start at T01. O-20 remains deliberately open under PT-005 because it is
+a Phase-1 backup-evidence entry condition, not a Phase-0 implementation-start condition.

@@ -90,6 +90,12 @@ The implementer must use the Nx 23 generator option names shown by that pinned i
 record the resolved noninteractive commands in the task evidence; accepting an interactive default
 is not equivalent to these choices.
 
+“Explicit target” describes the observable Nx contract, not how the target entered project
+configuration. A plugin-inferred target is acceptable only when `nx show project` exposes the
+required stable name and configuration and the workspace contract test invokes it successfully.
+A manually declared target is equally acceptable under the same proof. A package script or tool
+command outside the Nx project graph is not a target.
+
 ### Target contract
 
 - Every production project has an explicit `lint` and `typecheck` target.
@@ -97,13 +103,17 @@ is not equivalent to these choices.
 - `db:test` includes PostgreSQL Testcontainers integration tests and therefore belongs in the dev
   `test` gate; “test” is not constrained to mocked unit tests.
 - `api:e2e` starts a Nest test application against PostgreSQL 17 Testcontainers.
-- `api:health-smoke` starts a real loopback listener, asserts HTTP 200 without a production global
-  `fetch` call, and always tears the listener down.
+- `api:health-smoke` owns a PostgreSQL 17 Testcontainer, starts a real loopback listener, asserts
+  HTTP 200 without a production global `fetch` call, and always tears both resources down.
 - `web:e2e` invokes Playwright and owns browser layout/RTL assertions.
 - `api:openapi-check` generates the document in a deterministic test profile and fails on snapshot
   delta.
 - `db:migration-check` runs Drizzle generation into a disposable comparison location and fails on
   schema/migration drift without rewriting the checked-in migration during verification.
+- `testing:compose-smoke` starts the loopback-only PostgreSQL 17 Compose service with dummy example
+  values, waits for readiness, executes `SELECT 1`, and tears the stack down even on failure.
+- `testing:neon-parser-check` invokes the redaction-safe PowerShell parser self-test through
+  `powershell.exe` on Windows or `pwsh` elsewhere without weakening Windows PowerShell compatibility.
 - Build targets produce `api`, `worker`, and `web` production artifacts. Native/release-matrix
   targets do not exist until their roadmap phase.
 
@@ -270,6 +280,11 @@ selects dialect `postgresql`, the schema entry point, migrations output, and the
 checked-in migrations are produced by `drizzle-kit generate` and applied by
 `drizzle-kit migrate` or the injectable migration adapter.
 
+The Compose service name is `postgres`. The `testing:compose-smoke` target owns its full lifecycle:
+start with `.env.example`, wait for the service health/readiness signal, execute a real `SELECT 1`,
+and run `docker compose down --volumes` from a `finally` path. It proves the local profile is
+operational without becoming an undeclared dependency of API tests or leaving test data behind.
+
 This section implements R3 and R5.
 
 ## D6. Health API and contract generation
@@ -279,11 +294,19 @@ controller path of `health`. The process binds to `127.0.0.1` by default. No con
 `api/v1` in its decorator.
 
 ```ts
-declare const HealthStatusSchema: ZodType<HealthStatus>;
-type HealthStatus = {
-  readonly status: 'ok' | 'error';
-  readonly database: 'up' | 'down';
+declare const HealthyHealthStatusSchema: ZodType<HealthyHealthStatus>;
+type HealthyHealthStatus = {
+  readonly status: 'ok';
+  readonly database: 'up';
 };
+
+declare const UnhealthyHealthStatusSchema: ZodType<UnhealthyHealthStatus>;
+type UnhealthyHealthStatus = {
+  readonly status: 'error';
+  readonly database: 'down';
+};
+
+declare const HealthStatusSchema: ZodType<HealthyHealthStatus | UnhealthyHealthStatus>;
 
 interface DatabaseHealthProbe {
   check(): Promise<void>;
@@ -299,8 +322,11 @@ interface OpenApiSnapshotAdapter {
 `nestjs-zod` 5.5.0 to derive DTO/OpenAPI metadata from it; there is no handwritten duplicate DTO.
 The document returned by `SwaggerModule.createDocument` passes through `cleanupOpenApiDoc` before
 snapshot comparison or Swagger setup. The database indicator uses the injected Drizzle provider
-to execute a minimal query. Success maps to HTTP 200; a database exception maps to Terminus HTTP
-503 with the sanitized shared error shape. TypeORM and its health indicator are absent.
+to execute a minimal query. Terminus supplies the internal indicator/aggregation machinery, but the
+controller does not expose the framework's default `@HealthCheck()` envelope. It maps success to
+the exact shared `{ status: 'ok', database: 'up' }` DTO and a database exception to HTTP 503 with
+the exact shared `{ status: 'error', database: 'down' }` DTO. TypeORM and its health indicator are
+absent.
 
 `api:openapi-check` creates the application in a deterministic documentation profile, derives and
 normalizes OpenAPI, compares it with the committed snapshot, and exits nonzero on any delta. It is
@@ -336,8 +362,9 @@ The React provider/binding and `applyDocumentLocale` implementation live under `
 fallback, interpolation/plural rules, and `Intl`-backed number/date/bigint-money formatters remain
 in the shared package and have explicit fixtures. The empty shell contains only structural markup
 and catalog-backed English text. A test-only forced-RTL profile drives `dir="rtl"` without
-pretending that the complete Arabic catalog exists. D-23's Phase-0 exception defers full Turkish
-and Arabic catalogs to Phase 2.
+pretending that the complete Arabic catalog exists. The Phase-0 roadmap gate intentionally ships
+the seeded English shell first; D-23's full EN/TR/AR commitment remains binding and completes in
+Phase 2.
 
 The root flat ESLint configuration installs `eslint-plugin-i18next` and enables
 `i18next/no-literal-string` with `framework: 'react'` and the officially supported
@@ -359,15 +386,15 @@ This section implements R7.
 | illegal dependencies | flat ESLint plus policy fixture tests | every forbidden matrix edge, `db -> domain`, and backend React import fails; `db -> contracts` passes |
 | hardcoded shell strings | ESLint policy fixture | visible JSX text plus `aria-label`/`placeholder` literals fail under `jsx-only`; catalog-backed text/attributes and narrow structural exclusions pass |
 | URL/config classification | `db` Vitest with targeted fast-check | absolute URL, accepted schemes, required host/path/user/password, encoded credentials, IPv6/ports, and false-positive query strings; Neon `-pooler.` direct host rejected; typed errors, no exit |
-| Compose safety | contract test plus `docker compose config --quiet` | PostgreSQL 17, loopback bind, no top-level version or Compose credential literal, required variables, dummy-only tracked example |
+| Compose safety and operability | contract test plus `testing:compose-smoke` | PostgreSQL 17, loopback bind, no top-level version or credential literal, dummy-only example; real readiness/`SELECT 1`; unconditional teardown |
 | schema and migrations | PostgreSQL 17 Testcontainers | every D4 table/column/FK/CHECK/index; no cascade-delete FK; NULLS NOT DISTINCT cases; run twice is idempotent with exactly the deterministic seed workspace; no feature seeds or raw-body/lifecycle columns |
 | Drizzle runtime | `db` integration tests | runtime URL reaches provider; direct URL reaches migrations; factories injectable |
-| health endpoint | `api:e2e` with Testcontainers and forced outage | exact route; 200/up and 503/down; loopback bootstrap |
+| health endpoint | `api:e2e` and self-contained `api:health-smoke` with Testcontainers | exact flat route bodies; 200/up and 503/down; loopback bootstrap; resources always close |
 | OpenAPI drift | `api:openapi-check` | deterministic generated snapshot equals tracked file |
 | i18n semantics | framework-neutral Vitest | English fallback, interpolation/pluralization, and number/date/bigint-money formatting fixtures |
 | web semantics | web Vitest + RTL + MSW | file catalog text and LTR/forced-RTL attributes; HTTP seams use MSW if introduced |
-| web geometry | invoked Playwright `web:e2e` | no overflow/overlap in LTR and RTL at committed desktop/mobile viewports |
-| CI/security contracts | workflow parsing tests plus Gitleaks | triggers/tiers/immutable actions, exact setup runtime/install inputs, one frozen install, least-privilege permissions, real scan commands, no primary secret in any future backup workflow |
+| web geometry | installed Chromium plus invoked Playwright `web:e2e` | browser provisioning succeeds; no overflow/overlap in LTR and RTL at committed desktop/mobile viewports |
+| CI/security contracts | workflow parsing tests plus Gitleaks | named workflows, triggers/tiers/immutable actions, exact setup inputs, one frozen install, least privilege, real scan invocation in both tiers, ephemeral DB URLs, no primary secret in any backup workflow |
 | Neon PowerShell parser | Windows PowerShell-compatible self-test | libpq mapping, optional parameters, redaction, malformed/pooler rejection, setup copy/existence guard, both runbook callers dot-source the installed parser |
 
 There is no repo-wide coverage threshold. No test asserts arbitrary millisecond/minute completion
@@ -381,12 +408,20 @@ This section implements R8 and contributes to R12.
 
 ### Branch tiers
 
-The `dev` workflow runs frozen install, lint with zero warnings, explicit typecheck, unit tests,
-integration tests (including Testcontainers), and the pinned Gitleaks history/tree scan. The `main`
-workflow runs the dev tier plus `api:e2e`, `web:e2e`, `api:openapi-check`,
-`db:migration-check`, and `api`/`worker`/`web` production builds. Publishing, signing, packaging,
-and release targets belong to later phases. Workflow contracts parse the checked-in YAML and assert
-the commands really name existing Nx targets. No invented timing SLO is part of either tier.
+The `.github/workflows/dev-checks.yml` workflow runs frozen install, lint with zero warnings,
+explicit typecheck, unit tests, integration tests (including Testcontainers), and the pinned
+Gitleaks history/tree scan. The `.github/workflows/main-gate.yml` workflow runs the dev tier plus
+`testing:compose-smoke`, `testing:neon-parser-check`, `api:e2e`, `web:e2e`,
+`api:openapi-check`, `db:migration-check`, and `api`/`worker`/`web` production builds. It installs
+the pinned Chromium browser and provisions ephemeral PostgreSQL 17 runtime/direct URLs before the
+targets that require them. Publishing, signing, packaging, and release targets belong to later
+phases. Workflow contracts parse the checked-in YAML and assert the commands really name existing
+Nx targets. No invented timing SLO is part of either tier.
+
+The OpenAPI snapshot remains a main-tier phase gate, consistent with D-20's deliberately smaller
+dev tier; this is an accepted tiering choice, not an unresolved omission. T26 adds the secret-scan
+target to both already-created workflows and extends both workflow contract tests, so the final
+files—not merely a local command—enforce the D9 security gate.
 
 All reusable action references are immutable full SHAs with tag comments. For this baseline,
 `pnpm/setup@v2` is the pnpm-11-compatible successor and receives `runtime: node@24` plus
@@ -412,16 +447,20 @@ external evidence in addition to CI.
 Only names and scopes are tracked; values are never copied into a file or evidence log. A public
 backup workflow must never reference, receive, or print `HEALTHCHECKS_IO_PRIMARY_KEY`. Browser code
 receives none of these values. `.env`, Compose interpolation, logs, OpenAPI, test reports, and docs
-are scanned for leakage.
+are scanned for leakage. D-24 permits repository-secret storage, and the Phase-0 inventory keeps
+the primary key while forbidding every current workflow from receiving it; absent a later owner
+amendment, this specified behavior is not an open implementation choice.
 
 ### Healthchecks.io boundary
 
-Phase 0 records two distinct owner-provisioned checks: primary cycle and backup workflow (including
-eventual valid no-op). Their owner-selected healthchecks.io labels are not Windows Scheduled Task
-names. The spec does not prescribe grace or cadence values. Because no cycle exists in Phase 0,
-there is no ping client, placeholder scheduled workflow, or direct outbound `fetch`. Phase 1 wires
-successful terminal paths through the D-15 shared HTTP wrapper: primary only after its complete
-success conditions, backup after successful completion including valid no-op.
+Phase 0 ensures two distinct owner-provisioned checks exist: primary cycle and backup workflow
+(including eventual valid no-op). T28 reuses and records a correctly configured existing check or
+creates a missing one; it never renames one after a Windows Scheduled Task. The spec does not
+prescribe grace or cadence values, and incomplete owner configuration is not guessed. Because no
+cycle exists in Phase 0, there is no ping client, placeholder scheduled workflow, or direct
+outbound `fetch`. Phase 1 wires successful terminal paths through the D-15 shared HTTP wrapper:
+primary only after its complete success conditions, backup after successful completion including
+valid no-op.
 
 O-20 remains open. This design does not add an evidence-health check, quarantine action, retry cap,
 or any escape from D-12 primary-ping suppression. Any such change requires the owner decision and
@@ -435,6 +474,10 @@ Steering files are a short index and usage guide, not a copied plan. They link t
 `docs/CONTEXT.md`, `docs/canonical-plan.md`, `docs/decision-ledger.md`, and
 `docs/work/board.md`, and direct an agent to read the canonical files. No arbitrary “first 50 lines”
 snapshot or duplicated decision prose is generated.
+
+The non-mutating `testing:markdown-check` target parses every Phase-0-touched Markdown file, checks
+internal links and balanced fences, and is rerun after closing documentation changes. It reports
+drift but never rewrites canonical files.
 
 Once targets exist, the `AGENTS.md` Commands placeholder is replaced with the verified install,
 Nx lint/typecheck/test/build/e2e, Drizzle generation/migration-check, Docker Compose, health, and
@@ -464,7 +507,8 @@ backup script and the runbook section 5 audit snippet both dot-source that insta
 retains a private parsing implementation. Static runbook contract tests verify the copy, existence
 assertion, and both dot-source callers, while the owner verifies the installed path on the Windows
 host. Parser tests remain compatible with the Windows PowerShell environment specified by the
-runbook.
+runbook. T29 exposes them as `testing:neon-parser-check`; the complete local and main CI gates invoke
+that target so the parser cannot regress after its task-local verification.
 
 This section implements R11.
 
@@ -488,7 +532,8 @@ This section implements R11.
 
 Completion requires all local targets and both CI tiers described in D8/D9, exact 200/503 health
 tests, real-browser LTR/RTL evidence, schema/constraint and migration-idempotence evidence, Gitleaks
-evidence, and owner-controlled evidence for the two checks, secret-name/scope inventory, GitHub
+evidence, Compose readiness/SQL evidence, Neon parser evidence, and owner-controlled evidence for
+the two checks, secret-name/scope inventory, GitHub
 secret scanning/push protection, current board, and D-19's informed plus independent changes
 reviews reconciled from fresh sessions. Documentation already live before PT-002 is not recreated.
 
@@ -513,16 +558,16 @@ This section implements R12.
 |---|---|---|---|
 | R1 | D1, D3 | T01–T05 | T05, T30 |
 | R2 | D2 | T06–T07 | T07, T30 |
-| R3 | D5 | T08–T10 | T08–T10, T30 |
+| R3 | D5 | T08–T09 | T08–T09, T30 |
 | R4 | D4 | T11–T16 | T14–T16, T30 |
 | R5 | D5 | T10, T15–T16 | T16, T30 |
 | R6 | D6 | T17–T19 | T19, T30 |
 | R7 | D7 | T20–T23 | T21–T23, T30 |
-| R8 | D8 | T05, T14, T19, T22–T23 | T30 |
+| R8 | D8 | T05, T16, T19, T22–T23 | T30 |
 | R9 | D3, D9 | T24–T26 | T24–T26, T30 |
 | R10 | D9 | T27–T28 | T27–T28, T30 |
-| R11 | D10 | T29, T31–T32 | T29, T31–T32 |
-| R12 | D8, D11 | T30, T33 | T30, T33 |
+| R11 | D10 | T29, T31–T33 | T29, T31–T33 |
+| R12 | D1, D8, D11 | T30, T33 | T30, T33 |
 
 Conversely, every D1–D11 section names its governing requirement, and every implementation task
 below cites both a requirement and a design section.
